@@ -15,6 +15,8 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 
 // roomId -> Map(socketId -> { name, language, code, updatedAt })
 const rooms = new Map();
+// roomId -> true quando a professora congelou a turma
+const frozen = new Map();
 function getRoom(roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Map());
   return rooms.get(roomId);
@@ -44,6 +46,8 @@ io.on('connection', (socket) => {
     }
     // Professora nova recebe estado completo; turma fica a saber que há update
     io.to(myRoom).emit('room_state', roomState(myRoom));
+    // Quem entra (aluno ou professora) recebe logo o estado de freeze atual
+    socket.emit('freeze_state', { frozen: frozen.get(myRoom) === true });
   });
 
   socket.on('code_update', ({ roomId, code, language }) => {
@@ -70,6 +74,14 @@ io.on('connection', (socket) => {
     const r = String(roomId || myRoom || '');
     if (!r) return;
     socket.to(r).emit('request_state');
+  });
+
+  // Professora congela/descongela a turma (só aceite de teacher)
+  socket.on('freeze', ({ roomId, frozen: f }) => {
+    const r = String(roomId || myRoom || '');
+    if (!r || myRole !== 'teacher') return;
+    frozen.set(r, f === true);
+    io.to(r).emit('freeze_state', { frozen: frozen.get(r) });
   });
 
   socket.on('disconnect', () => {

@@ -33,7 +33,7 @@
     <input id="search" placeholder="Pesquisar aluno..." class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm outline-none focus:border-violet-500" />
     <p id="connLabel" class="text-xs text-red-300">● a ligar...</p>
     <button id="snapshotBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2 text-sm">Pedir snapshot à turma</button>
-    <button class="mt-auto bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold">Congelar turma</button>
+    <button id="freezeBtn" class="mt-auto bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold">Congelar turma</button>
   </aside>
 
   <!-- Main -->
@@ -64,6 +64,7 @@ const socket = io();
 const students = new Map(); // socketId -> { name, language, code }
 let focusId = null;
 let focusEditor = null;
+let frozen = false;
 
 const grid = document.getElementById('grid');
 const connLabel = document.getElementById('connLabel');
@@ -80,6 +81,17 @@ function join() {
 }
 document.getElementById('joinBtn').onclick = join;
 document.getElementById('snapshotBtn').onclick = () => socket.emit('request_snapshot', { roomId: roomInput.value });
+// Congelar/descongelar: o servidor guarda por sala e propaga freeze_state
+function updateFreezeUI() {
+  const b = document.getElementById('freezeBtn');
+  b.textContent = frozen ? 'Descongelar turma' : 'Congelar turma';
+  b.className = frozen
+    ? 'mt-auto bg-red-600 hover:bg-red-500 rounded-lg py-2 text-sm font-semibold'
+    : 'mt-auto bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold';
+  document.getElementById('roomBadge').textContent = frozen ? '■ ' + roomInput.value + ' (congelada)' : '● ' + roomInput.value;
+}
+document.getElementById('freezeBtn').onclick = () => socket.emit('freeze', { roomId: roomInput.value, frozen: !frozen });
+socket.on('freeze_state', ({ frozen: f }) => { frozen = f === true; updateFreezeUI(); });
 
 // ---- eventos live ----
 socket.on('room_state', (list) => {

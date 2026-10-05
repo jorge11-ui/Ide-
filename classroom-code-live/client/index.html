@@ -83,8 +83,10 @@
     </div>
     <input type="file" id="uploadInput" accept=".py,.txt" class="hidden" />
     <span id="runTime" class="text-xs text-slate-500 font-mono"></span>
-    <span class="text-xs text-slate-500 ml-auto">execução local • sem servidor</span>
   </div>
+
+  <!-- Aviso de turma congelada -->
+  <div id="freezeBanner" class="hidden px-4 py-1.5 text-xs font-semibold text-center bg-red-600 text-white">Turma congelada pela professora — editor só de leitura</div>
 
   <!-- Editor -->
   <div id="editor"></div>
@@ -172,6 +174,15 @@ function sendUpdate() {
   socket.emit('code_update', { roomId: roomInput.value, code, language: langSelect.value });
   document.getElementById('lastSend').textContent = new Date().toLocaleTimeString() + ' (' + code.length + ' chars)';
 }
+// Congelar: a professora bloqueia a escrita (readOnly) via freeze_state
+window._frozen = false;
+function applyFreeze(f) {
+  window._frozen = f === true;
+  const b = document.getElementById('freezeBanner');
+  if (b) b.classList.toggle('hidden', !window._frozen);
+  if (window._editor && window.monaco) window._editor.updateOptions({ readOnly: window._frozen });
+}
+socket.on('freeze_state', ({ frozen: f }) => applyFreeze(f));
 
 // ---------- execução local e rápida ----------
 const output = document.getElementById('output');
@@ -286,7 +297,7 @@ require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-edi
 require(['vs/editor/editor.main'], function () {
   const editor = monaco.editor.create(document.getElementById('editor'), {
     value: (loadSaved(roomInput.value, langSelect.value) ?? defaultTemplate(langSelect.value)),
-    language: langSelect.value, theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', automaticLayout: true, fontSize: 14, minimap: { enabled: false }
+    language: langSelect.value, theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: window._frozen === true, automaticLayout: true, fontSize: 14, minimap: { enabled: false }
   });
   window._editor = editor;
   document.getElementById('chars').textContent = editor.getValue().length + ' chars';
