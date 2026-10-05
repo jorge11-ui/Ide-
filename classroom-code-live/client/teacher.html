@@ -116,6 +116,8 @@
   .sidebar { box-shadow: 0 0 24px rgba(2, 6, 23, .12); }
   .card { box-shadow: 0 8px 24px rgba(2, 6, 23, .12); }
   .rowitem { transition: background-color .16s ease, border-color .16s ease; }
+  .remove-student-btn { flex: 0 0 auto; padding: .35rem .45rem; border-radius: .5rem; color: #fca5a5; font-size: .7rem; }
+  .remove-student-btn:hover { color: #fff; background: rgba(220, 38, 38, .75); }
   #search, #searchBoard, #roomInput, #wcmd { transition: border-color .16s ease, box-shadow .16s ease; }
   #search:focus, #searchBoard:focus, #roomInput:focus {
     box-shadow: 0 0 0 3px rgba(139, 92, 246, .15);
@@ -482,7 +484,19 @@
 // ================= base =================
 const qs = new URLSearchParams(location.search);
 const roomInput = document.getElementById('roomInput');
-if (qs.get('room')) roomInput.value = qs.get('room');
+const teacherRoomStorageKey = 'ccl-teacher-current-room';
+let savedTeacherRoom = '';
+try { savedTeacherRoom = localStorage.getItem(teacherRoomStorageKey) || ''; } catch (e) {}
+roomInput.value = savedTeacherRoom || qs.get('room') || roomInput.value;
+function persistTeacherRoom(room) {
+  const selectedRoom = String(room || '').trim();
+  if (!selectedRoom) return;
+  try { localStorage.setItem(teacherRoomStorageKey, selectedRoom); } catch (e) {}
+  const nextUrl = new URL(location.href);
+  nextUrl.searchParams.set('room', selectedRoom);
+  history.replaceState(null, '', nextUrl);
+}
+persistTeacherRoom(roomInput.value);
 document.getElementById('teacherLogoutBtn').onclick = async () => {
   try {
     const response = await fetch('/teacher-logout', { method: 'POST' });
@@ -863,7 +877,13 @@ onSock('task_error', ({ message } = {}) => {
 });
 
 function joinUI() {
-  const room = roomInput.value;
+  const room = roomInput.value.trim();
+  if (!room) {
+    logEvent('Indica o código da turma antes de entrar.');
+    return false;
+  }
+  roomInput.value = room;
+  persistTeacherRoom(room);
   if (room !== lastRoomT) { sessionStart = Date.now(); prevOnline = new Set(); lastRoomT = room; }
   document.getElementById('sessRoom').textContent = room;
   document.getElementById('roomName').textContent = room;
@@ -887,9 +907,10 @@ function joinUI() {
   if (taskHistoryRoom !== room) loadTaskHistory(room);
   window._wroom = room;
   tickClock();
+  return true;
 }
 function join() {
-  joinUI();
+  if (!joinUI()) return;
   emitSock('join_room', { roomId: roomInput.value, name: 'Professora', role: 'teacher' });
   emitSock('request_snapshot', { roomId: roomInput.value });
 }
@@ -1071,6 +1092,24 @@ onSock('room_state', (list) => {
   render();
   renderTaskHistory();
 });
+onSock('student_removed', ({ studentId, name } = {}) => {
+  if (!studentId || !students.has(studentId)) return;
+  const removedStudent = students.get(studentId);
+  students.delete(studentId);
+  prevOnline.delete(studentId);
+  if (focusId === studentId) focusId = [...students.keys()][0] || null;
+  taskHistory.forEach(task => {
+    task.submissions = (task.submissions || []).filter(submission => submission.studentId !== studentId);
+  });
+  saveRosterCache();
+  saveTaskHistory();
+  render();
+  renderTaskHistory();
+  logEvent((name || removedStudent.name) + ' e os respetivos dados foram eliminados desta turma.');
+});
+onSock('student_remove_error', ({ message } = {}) => {
+  if (message) logEvent(message);
+});
 onSock('code_update', ({ studentId, name, code, language, progressStatus, progressUpdatedAt, joinedAt, lastSeenAt }) => {
   const previous = students.get(studentId) || {};
   students.set(studentId, {
@@ -1097,6 +1136,29 @@ function formatAttendance(timestamp) {
 
 // ================= render =================
 const list = document.getElementById('studentList');
+function removeStudent(studentId) {
+  const student = students.get(studentId);
+  if (!student) return;
+  if (!confirm('Eliminar ' + student.name + ' desta turma? O código guardado no servidor e todas as entregas e feedbacks serão apagados permanentemente. A cópia local no dispositivo do aluno não será apagada.')) return;
+  if (!socket || !socket.connected) {
+    logEvent('Sem ligação ao servidor — o aluno não foi eliminado.');
+    return;
+  }
+  socket.emit('remove_student', { roomId: roomInput.value, studentId });
+}
+function createRemoveStudentButton(studentId, student) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'remove-student-btn';
+  button.textContent = 'Eliminar';
+  button.title = 'Eliminar o aluno e apagar permanentemente os dados guardados no servidor';
+  button.setAttribute('aria-label', 'Eliminar ' + student.name + ' e os dados da turma');
+  button.onclick = (event) => {
+    event.stopPropagation();
+    removeStudent(studentId);
+  };
+  return button;
+}
 function render() {
   const q = document.getElementById('search').value.toLowerCase();
   list.innerHTML = '';
@@ -1107,8 +1169,10 @@ function render() {
     totalChars += (s.code || '').length;
     if (s.online) onlineCount++;
     if (!s.name.toLowerCase().includes(q)) return;
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-1';
     const b = document.createElement('button');
-    b.className = 'rowitem w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left border ' + (id === focusId ? 'active bg-violet-600/20 border-violet-500/50' : 'border-transparent hover:bg-slate-800');
+    b.className = 'rowitem min-w-0 flex-1 flex items-center gap-2 px-2 py-1.5 rounded-lg text-left border ' + (id === focusId ? 'active bg-violet-600/20 border-violet-500/50' : 'border-transparent hover:bg-slate-800');
     b.innerHTML =
       '<span class="w-8 h-8 rounded-full grid place-items-center text-xs font-bold shrink-0" style="background:' + avColor(id) + '">' + escapeHtml((s.name.trim()[0] || 'A').toUpperCase()) + '</span>' +
       '<span class="min-w-0"><span class="block text-xs font-medium truncate">' + escapeHtml(s.name) + '</span>' +
@@ -1117,7 +1181,9 @@ function render() {
       '<span class="ml-auto text-slate-600">›</span>';
     b.title = 'Entrou: ' + formatAttendance(s.joinedAt) + ' • Última atividade: ' + formatAttendance(s.lastSeenAt);
     b.onclick = () => { focusId = id; render(); };
-    list.appendChild(b);
+    const remove = createRemoveStudentButton(id, s);
+    row.append(b, remove);
+    list.appendChild(row);
   });
   if (students.size === 0) list.innerHTML = '<p class="text-xs text-slate-500 px-1">Nenhum aluno ligado. Alunos: <code class="font-mono">/?room=' + escapeHtml(roomInput.value) + '</code></p>';
   // ---- board da vista Alunos: só cartões ----
@@ -1126,6 +1192,8 @@ function render() {
   bg.innerHTML = '';
   entries.forEach(([id, s]) => {
     if (!s.name.toLowerCase().includes(qb)) return;
+    const cardWrap = document.createElement('div');
+    cardWrap.className = 'min-w-0';
     const card = document.createElement('button');
     card.className = 'text-left rounded-xl overflow-hidden border transition ' + (id === focusId ? 'bg-slate-900 border-violet-500' : 'bg-slate-900 border-slate-800 hover:border-violet-500');
     card.innerHTML =
@@ -1146,7 +1214,10 @@ function render() {
       render();
       document.getElementById('boardFocus').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
-    bg.appendChild(card);
+    const remove = createRemoveStudentButton(id, s);
+    remove.classList.add('mt-1', 'ml-auto', 'block');
+    cardWrap.append(card, remove);
+    bg.appendChild(cardWrap);
   });
   if (students.size === 0) bg.innerHTML = '<p class="text-sm text-slate-500 col-span-full">Nenhum aluno ainda. Partilha o link com a turma.</p>';
   document.getElementById('boardCount').textContent = students.size + (students.size === 1 ? ' aluno' : ' alunos');

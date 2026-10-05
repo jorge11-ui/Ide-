@@ -197,11 +197,20 @@ function roomState(roomId) {
 const dirty = new Set();
 function dataFile(roomId) { return path.join(DATA_DIR, String(roomId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) + '.json'); }
 function markDirty(roomId) { dirty.add(roomId); }
+function persistRoomNow(roomId) {
+  try {
+    fs.writeFileSync(dataFile(roomId), JSON.stringify([...getRoom(roomId).entries()]));
+    dirty.delete(roomId);
+    return true;
+  } catch (error) {
+    console.error('Não foi possível guardar a lista de alunos:', error.message);
+    return false;
+  }
+}
 setInterval(() => {
   dirty.forEach((roomId) => {
-    try { fs.writeFileSync(dataFile(roomId), JSON.stringify([...getRoom(roomId).entries()])); } catch (e) {}
+    persistRoomNow(roomId);
   });
-  dirty.clear();
 }, 3000);
 try {
   fs.readdirSync(DATA_DIR).filter((f) => f.endsWith('.json') && f !== 'tasks.json').forEach((f) => {
@@ -225,8 +234,10 @@ const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 function persistTasks() {
   try {
     fs.writeFileSync(TASKS_FILE, JSON.stringify([...tasksByRoom.entries()]));
+    return true;
   } catch (error) {
     console.error('Não foi possível guardar tarefas e entregas:', error.message);
+    return false;
   }
 }
 try {
@@ -369,6 +380,45 @@ io.on('connection', (socket) => {
     const r = String(roomId || myRoom || '');
     if (!r) return;
     socket.to(r).emit('request_state');
+  });
+
+  socket.on('remove_student', (payload = {}) => {
+    const r = String(payload.roomId || myRoom || '');
+    const sid = typeof payload.studentId === 'string' ? payload.studentId : '';
+    if (!r || myRole !== 'teacher' || r !== myRoom || !sid) {
+      socket.emit('student_remove_error', { studentId: sid, message: 'Não foi possível remover esse aluno.' });
+      return;
+    }
+    const room = getRoom(r);
+    const student = room.get(sid);
+    if (!student) {
+      socket.emit('student_remove_error', { studentId: sid, message: 'O aluno já não está nesta turma.' });
+      return;
+    }
+    const studentSocketId = student.socketId;
+    const originalSubmissions = (tasksByRoom.get(r) || []).map(task => [task, task.submissions]);
+    room.delete(sid);
+    originalSubmissions.forEach(([task]) => {
+      task.submissions = task.submissions.filter(submission => submission.studentId !== sid);
+    });
+
+    if (!persistRoomNow(r) || !persistTasks()) {
+      room.set(sid, student);
+      originalSubmissions.forEach(([task, submissions]) => { task.submissions = submissions; });
+      persistRoomNow(r);
+      persistTasks();
+      socket.emit('student_remove_error', { studentId: sid, message: 'Não foi possível guardar a remoção. O aluno e as entregas foram mantidos.' });
+      return;
+    }
+
+    if (studentSocketId) {
+      sock2id.delete(studentSocketId);
+      const studentSocket = io.sockets.sockets.get(studentSocketId);
+      if (studentSocket) studentSocket.disconnect(true);
+    }
+    io.to(r + ':teachers').emit('student_removed', { studentId: sid, name: student.name });
+    io.to(r + ':teachers').emit('room_state', roomState(r));
+    io.to(r + ':teachers').emit('class_tasks', (tasksByRoom.get(r) || []).map(teacherTask));
   });
 
   socket.on('student_progress', (payload = {}) => {
