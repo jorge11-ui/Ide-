@@ -29,6 +29,16 @@
   body.light #output .text-red-400 { color: #dc2626 !important; }
   body.light #output .text-slate-600 { color: #94a3b8 !important; }
   body.light footer { background-color: #ffffff !important; border-color: #e2e8f0 !important; color: #64748b !important; }
+  /* Menu Definições */
+  .menu-item { display: block; width: 100%; text-align: left; font-size: 13px; padding: 6px 8px; border-radius: 6px; color: #e2e8f0; }
+  .menu-item:hover { background-color: #1e293b; }
+  .menu-label { font-size: 11px; font-weight: 600; color: #94a3b8; letter-spacing: .04em; }
+  body.light #settingsMenu { background-color: #ffffff !important; border-color: #cbd5e1 !important; }
+  body.light #settingsMenu input, body.light #settingsMenu select { background-color: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+  body.light #settingsMenu hr { border-color: #e2e8f0 !important; }
+  body.light .menu-item { color: #0f172a; }
+  body.light .menu-item:hover { background-color: #f1f5f9; }
+  body.light .menu-label { color: #64748b; }
 </style>
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-screen">
@@ -47,22 +57,31 @@
   <!-- Toolbar -->
   <div id="toolbar" class="flex flex-wrap items-center gap-2 px-4 py-2 bg-slate-900/60 border-b border-slate-800">
     <input id="nameInput" value="Ana — PC 07" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm w-44 outline-none focus:border-emerald-500" />
-    <input id="roomInput" value="room_12A" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm w-32 outline-none focus:border-emerald-500 font-mono" title="Sala" />
-    <button id="joinBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1 text-sm">Entrar</button>
-    <select id="langSelect" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
-      <option value="javascript">JavaScript</option>
+    <select id="langSelect" title="Linguagem" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
       <option value="python">Python</option>
-      <option value="html">HTML</option>
-      <option value="css">CSS</option>
-    </select>
-    <select id="themeSelect" title="Tema da página e do editor" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
-      <option value="dark">Escuro</option>
-      <option value="light">Claro</option>
     </select>
     <button id="runBtn" class="bg-emerald-600 hover:bg-emerald-500 rounded px-4 py-1 text-sm font-bold">▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span></button>
-    <button id="clearBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-sm">Limpar</button>
-    <button id="dlBtn" title="Descarrega o código como ficheiro para o computador" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-sm">Descarregar</button>
-    <button id="newBtn" title="Limpar e começar do zero (apaga o guardado desta sala+linguagem)" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-sm">Novo</button>
+    <div class="relative">
+      <button id="settingsBtn" title="Definições" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1 text-sm font-bold">⋯</button>
+      <div id="settingsMenu" class="hidden absolute right-0 mt-1 w-64 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3 z-50 space-y-2">
+        <p class="menu-label">SALA</p>
+        <div class="flex gap-1">
+          <input id="roomInput" value="room_12A" class="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none focus:border-emerald-500 font-mono" title="Sala" />
+          <button id="joinBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1 text-sm">Entrar</button>
+        </div>
+        <p class="menu-label">TEMA</p>
+        <select id="themeSelect" title="Tema da página e do editor" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
+          <option value="dark">Escuro</option>
+          <option value="light">Claro</option>
+        </select>
+        <hr class="border-slate-700" />
+        <button id="uploadBtn" title="Carregar um ficheiro de código do computador para o editor" class="menu-item">Upload de código…</button>
+        <button id="dlBtn" title="Descarrega o código como ficheiro para o computador" class="menu-item">Descarregar código</button>
+        <button id="newBtn" title="Limpar e começar do zero (apaga o guardado desta sala+linguagem)" class="menu-item">Novo (começar do zero)</button>
+        <button id="clearBtn" class="menu-item">Limpar consola</button>
+      </div>
+    </div>
+    <input type="file" id="uploadInput" accept=".py,.txt" class="hidden" />
     <span id="runTime" class="text-xs text-slate-500 font-mono"></span>
     <span class="text-xs text-slate-500 ml-auto">execução local • sem servidor</span>
   </div>
@@ -75,7 +94,7 @@
     <div class="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-slate-800">
       <span class="font-semibold text-slate-300">Consola</span>
       <span id="runLabel" class="text-slate-500 font-mono"></span>
-      <span class="ml-auto text-slate-600">JS = Worker + timeout 3s • Python = Pyodide • HTML = iframe</span>
+      <span class="ml-auto text-slate-600">Python via Pyodide • corre no browser</span>
     </div>
     <pre id="output" class="flex-1 overflow-auto px-4 py-2 text-slate-300">Prime <b>▶ Executar</b> para ver o resultado aqui.</pre>
     <iframe id="preview" class="flex-1 w-full bg-white hidden" sandbox="allow-scripts" title="preview"></iframe>
@@ -111,6 +130,12 @@ let savedTheme = 'dark';
 try { savedTheme = localStorage.getItem('ccl-theme') || 'dark'; } catch (e) {}
 applyTheme(savedTheme === 'light' ? 'light' : 'dark');
 themeSelect.onchange = () => applyTheme(themeSelect.value);
+// Menu Definições (⋯): abre/fecha, fecha ao clicar fora ou com Escape
+const settingsMenu = document.getElementById('settingsMenu');
+document.getElementById('settingsBtn').onclick = (e) => { e.stopPropagation(); settingsMenu.classList.toggle('hidden'); };
+document.addEventListener('click', (e) => { if (!settingsMenu.classList.contains('hidden') && !settingsMenu.contains(e.target)) settingsMenu.classList.add('hidden'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') settingsMenu.classList.add('hidden'); });
+settingsMenu.addEventListener('click', (e) => { if (e.target.closest('button')) settingsMenu.classList.add('hidden'); });
 if (qs.get('room')) roomInput.value = qs.get('room');
 if (qs.get('name')) nameInput.value = qs.get('name');
 document.getElementById('roomLabel').textContent = roomInput.value;
@@ -162,18 +187,6 @@ function showConsole(){ output.classList.remove('hidden'); preview.classList.add
 function showPreview(){ output.classList.add('hidden'); preview.classList.remove('hidden'); }
 document.getElementById('clearBtn').onclick = () => { output.textContent = ''; showConsole(); runTime.textContent = ''; };
 
-// JS em Web Worker: não congela o editor + mata loops infinitos aos 3s
-function runJS(code) {
-  return new Promise((resolve) => {
-    const wSrc = "onmessage=function(e){var logs=[];var console={log:function(){logs.push([].map.call(arguments,function(v){try{return typeof v==='object'?JSON.stringify(v):String(v)}catch(x){return String(v)}}).join(' '))},error:function(){logs.push('[erro] '+[].join.call(arguments,' '))},warn:function(){logs.push('[aviso] '+[].join.call(arguments,' '))}};try{var r=(new Function('console','\"use strict\";'+e.data))(console);if(r!==undefined)logs.push(String(r));postMessage({ok:true,logs:logs})}catch(err){postMessage({ok:false,logs:logs,error:String((err&&err.stack)||err)})}}";
-    const w = new Worker(URL.createObjectURL(new Blob([wSrc], { type: 'text/javascript' })));
-    const kill = setTimeout(() => { w.terminate(); resolve({ ok: false, logs: [], error: 'Timeout 3s — possível loop infinito. Worker terminado.' }); }, 3000);
-    w.onmessage = (ev) => { clearTimeout(kill); w.terminate(); resolve(ev.data); };
-    w.onerror = (err) => { clearTimeout(kill); w.terminate(); resolve({ ok: false, logs: [], error: String(err.message || err) }); };
-    w.postMessage(code);
-  });
-}
-
 // Python via Pyodide, pré-carregado em fundo para o Run ser rápido
 let pyodidePromise = null;
 function getPyodide() {
@@ -205,26 +218,14 @@ async function runPython(code) {
 async function run() {
   if (!window._editor) return;
   const code = window._editor.getValue();
-  const lang = langSelect.value;
   const t0 = performance.now();
   runBtn.disabled = true; runBtn.textContent = '⏳ A correr...';
-  runLabel.textContent = lang + ' • ' + code.length + ' chars';
+  runLabel.textContent = 'python • ' + code.length + ' chars';
   try {
-    if (lang === 'html' || lang === 'css') {
-      const doc = lang === 'css' ? '<style>' + code + '</style><p style="font-family:sans-serif;color:#666">CSS aplicado a esta página de teste ↑ (adiciona HTML no modo HTML para veres mais)</p>' : code;
-      preview.srcdoc = doc; showPreview();
-      runTime.textContent = 'render ' + Math.round(performance.now() - t0) + 'ms';
-    } else if (lang === 'python') {
-      showConsole(); output.textContent = 'A correr Python... (1ª vez pode demorar uns segundos a carregar o Pyodide)';
-      const r = await runPython(code);
-      print(r.logs, false);
-      runTime.textContent = Math.round(performance.now() - t0) + 'ms';
-    } else {
-      showConsole(); output.textContent = 'A correr...';
-      const r = await runJS(code);
-      print(r.ok ? r.logs : [...r.logs, '⛔ ' + r.error], !r.ok);
-      runTime.textContent = Math.round(performance.now() - t0) + 'ms';
-    }
+    showConsole(); output.textContent = 'A correr Python... (1ª vez pode demorar uns segundos a carregar o Pyodide)';
+    const r = await runPython(code);
+    print(r.logs, false);
+    runTime.textContent = Math.round(performance.now() - t0) + 'ms';
   } catch (e) {
     showConsole(); print(['⛔ ' + (e && e.message || e)], true);
   } finally {
@@ -237,10 +238,7 @@ window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.ke
 // ---------- guardar no computador (localStorage por sala+linguagem) ----------
 function codeKey(room, lang) { return 'ccl-code:' + room + ':' + lang; }
 function defaultTemplate(lang) {
-  if (lang === 'python') return '# Escreve aqui o teu código...\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
-  if (lang === 'html') return '<!DOCTYPE html>\n<html>\n<body>\n  <h1>Olá turma</h1>\n</body>\n</html>';
-  if (lang === 'css') return '/* Escreve aqui o teu CSS... */\nbody {\n  font-family: sans-serif;\n}';
-  return '// Escreve aqui o teu código...\nfunction soma(a, b) {\n  return a + b;\n}\n\nconsole.log(soma(2, 3));';
+  return '# Escreve aqui o teu código...\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
 }
 function loadSaved(room, lang) { try { return localStorage.getItem(codeKey(room, lang)); } catch (e) { return null; } }
 function saveLocal(room, lang, code) {
@@ -250,7 +248,7 @@ function saveLocal(room, lang, code) {
 }
 document.getElementById('dlBtn').onclick = () => {
   if (!window._editor) return;
-  const ext = { javascript: 'js', python: 'py', html: 'html', css: 'css' }[langSelect.value] || 'txt';
+  const ext = 'py';
   const safe = (nameInput.value || 'aluno').replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([window._editor.getValue()], { type: 'text/plain;charset=utf-8' }));
@@ -264,6 +262,23 @@ document.getElementById('newBtn').onclick = () => {
   window._editor.setValue(defaultTemplate(langSelect.value));
   saveLocal(roomInput.value, langSelect.value, window._editor.getValue());
   showConsole(); sendUpdate(true);
+};
+// Upload: carrega um ficheiro .py/.txt do computador para o editor
+document.getElementById('uploadBtn').onclick = () => document.getElementById('uploadInput').click();
+document.getElementById('uploadInput').onchange = (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f || !window._editor) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = String(reader.result || '').slice(0, 200000);
+    window._editor.setValue(text);
+    saveLocal(roomInput.value, langSelect.value, text);
+    const sl = document.getElementById('savedLabel');
+    if (sl) sl.textContent = 'Ficheiro ' + f.name.slice(0, 30) + ' carregado ✓';
+    showConsole(); sendUpdate(true);
+  };
+  reader.readAsText(f);
+  e.target.value = '';
 };
 
 // ---------- monaco ----------
@@ -279,13 +294,13 @@ require(['vs/editor/editor.main'], function () {
     const sl = document.getElementById('savedLabel');
     if (sl) sl.textContent = 'Restaurado onde paraste ✓';
   }
-  let prevLang = langSelect.value;
+  window._prevLang = langSelect.value;
   langSelect.onchange = () => {
-    try { localStorage.setItem(codeKey(roomInput.value, prevLang), editor.getValue()); } catch (e) {}
+    try { localStorage.setItem(codeKey(roomInput.value, window._prevLang), editor.getValue()); } catch (e) {}
     monaco.editor.setModelLanguage(editor.getModel(), langSelect.value);
     const saved = loadSaved(roomInput.value, langSelect.value);
     editor.setValue((saved !== null && saved !== undefined) ? saved : defaultTemplate(langSelect.value));
-    prevLang = langSelect.value;
+    window._prevLang = langSelect.value;
     showConsole(); sendUpdate(true);
   };
   editor.onDidChangeCursorPosition(e => {
