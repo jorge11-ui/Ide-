@@ -3,158 +3,1426 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Classroom Code Live — Professora</title>
+<title>WorkSpace — Professora</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+<script>try { if ((localStorage.getItem('ccl-teacher-theme') || 'dark') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}</script>
 <style>
   html, body { height: 100%; }
-  #focusEditor { height: 320px; }
+  #weditor { min-height: 0; }
   .mini-code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.45; white-space: pre; overflow: hidden; }
+  .navtab { padding: 6px 12px; font-size: 13px; border-radius: 8px; color: #94a3b8; border-bottom: 2px solid transparent; }
+  .navtab:hover { color: #e2e8f0; }
+  .navtab.active { color: #fff; border-bottom-color: #8b5cf6; background: rgba(139,92,246,.12); border-radius: 8px 8px 0 0; }
+  .menu-label { font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: .06em; }
+  /* Workspace em ecrã inteiro (para projetar): editor + terminal lado a lado */
+  #wspace:fullscreen { background: #020617; padding: 16px; overflow: auto; }
+  #wspace:fullscreen #wcols { flex-direction: row; height: calc(100vh - 150px); }
+  #wspace:fullscreen #weditor { flex: 0 0 var(--weditor-width, 60%); width: auto; height: auto; }
+  #wspace:fullscreen #wterm { flex: 1 1 0; min-width: 180px; }
+  #wspace:fullscreen #woutput { flex: 1; height: auto; min-height: 4rem; font-size: 14px; }
+  #wcols { flex: 1 1 auto; min-height: 300px; }
+  #weditor { flex: 0 0 var(--weditor-height, 16rem); height: var(--weditor-height, 16rem); min-height: 120px; }
+  #wterm { flex: 1 1 0; min-height: 144px; }
+  #woutput { flex: 1 1 auto; height: auto; min-height: 4rem; }
+  #taskTitle, #taskDescription { transition: border-color .16s ease, box-shadow .16s ease; }
+  #taskTitle:focus, #taskDescription:focus { box-shadow: 0 0 0 3px rgba(139, 92, 246, .15); }
+  .task-card { border: 1px solid rgba(148, 163, 184, .14); border-radius: .75rem; background: rgba(2, 6, 23, .18); }
+  .submission-card { border: 1px solid rgba(148, 163, 184, .14); border-radius: .6rem; background: rgba(2, 6, 23, .2); }
+  .submission-code { max-height: 24rem; overflow: auto; white-space: pre; border-radius: .5rem; background: #020617; padding: .75rem; color: #d1fae5; font: 12px/1.5 ui-monospace, Consolas, monospace; }
+  .workspace-resize {
+    position: relative;
+    z-index: 2;
+    flex: 0 0 10px;
+    display: grid;
+    place-items: center;
+    color: #64748b;
+    background: transparent;
+    cursor: row-resize;
+    touch-action: none;
+  }
+  .workspace-resize::after {
+    content: "";
+    width: 44px;
+    height: 3px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: .55;
+    transition: width .15s ease, opacity .15s ease, background-color .15s ease;
+  }
+  .workspace-resize:hover::after, .workspace-resize:focus-visible::after, .workspace-resize.is-resizing::after {
+    width: 64px;
+    opacity: 1;
+    background: #8b5cf6;
+  }
+  .workspace-resize:focus-visible { outline: 2px solid #8b5cf6; outline-offset: -2px; }
+  #wspace:fullscreen #wcols .workspace-resize { flex: 0 0 10px; cursor: col-resize; }
+  #wspace:fullscreen #wcols .workspace-resize::after { width: 3px; height: 44px; }
+  #wspace:fullscreen #wcols .workspace-resize:hover::after,
+  #wspace:fullscreen #wcols .workspace-resize:focus-visible::after,
+  #wspace:fullscreen #wcols .workspace-resize.is-resizing::after { width: 3px; height: 64px; }
+  html[data-theme="light"] body { background: #f1f5f9; color: #0f172a; }
+  body.light { background-color: #f1f5f9 !important; color: #0f172a !important; }
+  body.light #topbar, body.light .sidebar, body.light .card { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
+  body.light .navtab { color: #64748b; }
+  body.light .navtab:hover, body.light .navtab.active { color: #0f172a; }
+  body.light .menu-label, body.light .text-slate-500 { color: #64748b !important; }
+  body.light .text-slate-400 { color: #64748b !important; }
+  body.light .text-slate-300, body.light .text-slate-200 { color: #334155 !important; }
+  body.light input, body.light select { background-color: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+  body.light .rowitem:hover { background-color: #f1f5f9 !important; }
+  body.light .rowitem.active { background-color: rgba(139,92,246,.14) !important; }
+  body.light hr { border-color: #e2e8f0 !important; }
+
+  :root { color-scheme: dark; }
+  html[data-theme="light"] { color-scheme: light; }
+  body {
+    background-image: radial-gradient(ellipse at 50% -30%, rgba(124, 58, 237, .12), transparent 55%);
+    letter-spacing: .005em;
+  }
+  button, input, select { font: inherit; }
+  button { cursor: pointer; transition: background-color .16s ease, border-color .16s ease, color .16s ease, transform .16s ease; }
+  button:active { transform: translateY(1px); }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid #a78bfa;
+    outline-offset: 2px;
+  }
+  #topbar { box-shadow: 0 1px 0 rgba(148, 163, 184, .04); }
+  .teacher-brand { min-width: 0; }
+  .teacher-nav { display: flex; align-items: center; gap: .25rem; margin-left: auto; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 4px; border: 1px solid rgba(148, 163, 184, .1); border-radius: 12px; background: rgba(2, 6, 23, .32); }
+  .teacher-nav::-webkit-scrollbar { display: none; }
+  .navtab { flex: 0 0 auto; padding: 7px 13px; font-weight: 500; border: 0; border-radius: 8px; }
+  .navtab.active { color: #fff; border: 0; border-radius: 8px; background: linear-gradient(135deg, rgba(139, 92, 246, .95), rgba(99, 102, 241, .88)); box-shadow: 0 2px 8px rgba(109, 40, 217, .24); }
+  .teacher-tools { margin-left: auto; padding-left: 1rem; border-left: 1px solid rgba(148, 163, 184, .14); }
+  .connection-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid rgba(148, 163, 184, .12); border-radius: 999px; background: rgba(2, 6, 23, .24); color: #94a3b8; font-size: 11px; white-space: nowrap; }
+  .teacher-avatar { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 8px rgba(124, 58, 237, .2); }
+  #wfileTabs { min-width: 0; scrollbar-width: thin; scrollbar-color: #475569 transparent; }
+  .wfile-tab { display: inline-flex; align-items: center; gap: .45rem; max-width: 15rem; padding: .4rem .55rem .4rem .7rem; border: 1px solid transparent; border-bottom: 0; border-radius: .55rem .55rem 0 0; color: #94a3b8; background: transparent; font-size: .75rem; }
+  .wfile-tab:hover { color: #e2e8f0; background: rgba(148, 163, 184, .08); }
+  .wfile-tab.active { color: #f8fafc; background: #0f172a; border-color: #1e293b; }
+  .wfile-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wfile-close { display: grid; place-items: center; width: 1rem; height: 1rem; border-radius: .25rem; color: #64748b; line-height: 1; }
+  .wfile-close:hover { color: #fff; background: rgba(148, 163, 184, .2); }
+  .sidebar { box-shadow: 0 0 24px rgba(2, 6, 23, .12); }
+  .card { box-shadow: 0 8px 24px rgba(2, 6, 23, .12); }
+  .rowitem { transition: background-color .16s ease, border-color .16s ease; }
+  #search, #searchBoard, #roomInput, #wcmd { transition: border-color .16s ease, box-shadow .16s ease; }
+  #search:focus, #searchBoard:focus, #roomInput:focus {
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, .15);
+  }
+  #wspace { scrollbar-color: #475569 transparent; }
+  #weditor, #focusEditor, #boardEditor { box-shadow: 0 8px 24px rgba(2, 6, 23, .14); }
+  #boardGrid > button { box-shadow: 0 8px 22px rgba(2, 6, 23, .14); }
+  #boardGrid > button:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(2, 6, 23, .24); }
+  #wrunBtn, #qRun { box-shadow: 0 4px 12px rgba(5, 150, 105, .18); }
+  body.light {
+    background-image: radial-gradient(ellipse at 50% -30%, rgba(124, 58, 237, .08), transparent 55%);
+  }
+  body.light .sidebar { box-shadow: 0 0 24px rgba(15, 23, 42, .04); }
+  body.light .card, body.light #boardGrid > button { box-shadow: 0 8px 24px rgba(15, 23, 42, .06); }
+  body.light .navtab:hover { background: rgba(100, 116, 139, .09); }
+  body.light .teacher-nav { background: #f1f5f9; border-color: #e2e8f0; }
+  body.light .teacher-nav .navtab.active { color: #fff; background: linear-gradient(135deg, #7c3aed, #6366f1); }
+  body.light .teacher-tools { border-color: #e2e8f0; }
+  body.light .connection-status { background: #f8fafc; border-color: #e2e8f0; }
+  body.light .workspace-resize { color: #94a3b8; }
+  body.light .task-card { background: #fff; border-color: #dbe3ef; }
+  body.light #taskForm { border-color: #dbe3ef !important; }
+  body.light .submission-card { background: #f8fafc; border-color: #dbe3ef; }
+  body.light .submission-code { background: #f1f5f9; color: #0f172a; }
+  /* Light theme: soft neutral surfaces with deep, readable text and accents. */
+  body.light #topbar { background-color: #fff !important; border-color: #e2e8f0 !important; }
+  body.light #topbar .text-slate-500 { color: #64748b !important; }
+  body.light .bg-slate-900,
+  body.light .bg-slate-900\/60 { background-color: #fff !important; }
+  body.light .bg-slate-800,
+  body.light .bg-slate-800\/60,
+  body.light .bg-slate-800\/70 { background-color: #f1f5f9 !important; }
+  body.light .bg-slate-700 { background-color: #e2e8f0 !important; }
+  body.light .border-slate-800,
+  body.light .border-slate-700 { border-color: #dbe3ef !important; }
+  body.light .text-slate-600 { color: #475569 !important; }
+  body.light .text-emerald-300,
+  body.light .text-emerald-400 { color: #047857 !important; }
+  body.light .text-violet-300 { color: #6d28d9 !important; }
+  body.light .text-indigo-300 { color: #4338ca !important; }
+  body.light .teacher-nav { background-color: #f1f5f9; border-color: #dbe3ef; }
+  body.light .teacher-nav .navtab { color: #475569; }
+  body.light .teacher-nav .navtab:hover { background: #e2e8f0; color: #0f172a; }
+  body.light .teacher-nav .navtab.active,
+  body.light .teacher-nav .navtab.active:hover { color: #fff; }
+  body.light .connection-status { color: #334155; }
+  body.light .wfile-tab { color: #475569; }
+  body.light .wfile-tab:hover { color: #0f172a; background: #e2e8f0; }
+  body.light .wfile-tab.active { color: #0f172a; background: #fff; border-color: #dbe3ef; }
+  body.light .wfile-close:hover { color: #0f172a; background: #e2e8f0; }
+  body.light .sidebar { background-color: #f8fafc !important; border-color: #e2e8f0 !important; }
+  body.light .card,
+  body.light #boardFocus { background-color: #fff !important; border-color: #dbe3ef !important; }
+  body.light #studentList .rowitem { color: #1e293b; }
+  body.light #studentList .rowitem:hover { background-color: #f1f5f9 !important; }
+  body.light #studentList .rowitem.active { background-color: #ede9fe !important; border-color: #c4b5fd !important; }
+  body.light #boardGrid > button { background-color: #fff !important; border-color: #dbe3ef !important; }
+  body.light #boardGrid > button:hover { border-color: #8b5cf6 !important; }
+  body.light .mini-code { background-color: #f8fafc; color: #334155 !important; }
+  body.light #settingsMenu,
+  body.light #bellPanel,
+  body.light #wmenu { background-color: #fff !important; border-color: #dbe3ef !important; }
+  body.light #settingsMenu button,
+  body.light #bellPanel,
+  body.light #wmenu button { color: #334155; }
+  body.light #settingsMenu button:hover,
+  body.light #wmenu button:hover { background-color: #f1f5f9 !important; }
+  body.light #roomBadge { background-color: #dcfce7 !important; border-color: #86efac !important; color: #166534 !important; }
+  body.light #infoStatus { color: #047857 !important; }
+  body.light #boardCount,
+  body.light #rosterCount { background-color: #e2e8f0 !important; color: #334155 !important; }
+  body.light #wterm { background-color: #f8fafc !important; border-color: #cbd5e1 !important; }
+  body.light #wterm > div:first-child { border-color: #cbd5e1 !important; color: #64748b !important; }
+  body.light #woutput { background-color: #f8fafc !important; color: #1e293b !important; }
+  body.light #wterm > div:last-child { border-color: #cbd5e1 !important; }
+  body.light #wps1 { color: #047857 !important; }
+  body.light #wcmd { background-color: transparent !important; color: #0f172a !important; }
+  body.light #wspace { scrollbar-color: #94a3b8 transparent; }
+  body.light input::placeholder { color: #64748b !important; opacity: 1; }
+  body.light #wcmd::placeholder { color: #94a3b8 !important; }
+  body.light #wrunBtn,
+  body.light #qRun,
+  body.light #inviteBtn,
+  body.light #freezeBtn,
+  body.light #joinBtn,
+  body.light .teacher-nav .navtab.active { color: #fff !important; }
+  body.light #roomAvatar,
+  body.light #infoAvatar,
+  body.light .teacher-avatar,
+  body.light .rowitem > span:first-child,
+  body.light #boardGrid > button > div:first-child > span:first-child { color: #fff !important; }
+  body.light button:focus-visible,
+  body.light input:focus-visible,
+  body.light select:focus-visible { outline-color: #6d28d9; }
+  @media (max-width: 640px) {
+    #topbar { height: auto; min-height: 4rem; flex-wrap: wrap; gap: .5rem; padding: .6rem .75rem .55rem; }
+    .teacher-brand { flex: 1 1 auto; }
+    .teacher-tools { margin-left: auto; padding-left: .5rem; border-left: 0; }
+    .teacher-nav { order: 3; flex: 1 0 100%; margin-left: 0; justify-content: flex-start; }
+    .navtab { padding: 7px 11px; font-size: 12px; }
+    .connection-status { padding: 6px; }
+    .connection-label { display: none; }
+    #viewAlunos { padding: 1rem; }
+    #searchBoard { width: min(12rem, 55vw); }
+    #wcols { padding: 0 .75rem .75rem; }
+    #weditor { height: min(42vh, 20rem); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+  }
 </style>
 </head>
-<body class="bg-slate-950 text-slate-100 h-screen flex">
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col">
 
-  <!-- Sidebar -->
-  <aside class="w-64 shrink-0 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-4">
-    <div class="flex items-center gap-2">
-      <div class="w-8 h-8 rounded-lg bg-violet-500 grid place-items-center font-bold text-slate-950">T</div>
-      <div>
-        <h1 class="font-semibold text-sm">Painel Professora</h1>
-        <p class="text-xs text-slate-400 font-mono" id="roomLabelSide">room_12A</p>
+  <!-- ===== TOPBAR ===== -->
+  <header id="topbar" class="flex items-center gap-4 px-5 h-16 shrink-0 border-b border-slate-800 bg-slate-900">
+    <div class="teacher-brand flex items-center gap-2.5">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 grid place-items-center font-bold shadow-lg shadow-violet-950/30">W</div>
+      <div class="leading-tight">
+        <p class="font-bold text-sm tracking-wide">WorkSpace</p>
+        <p class="mt-0.5 text-[10px] font-medium uppercase tracking-[.12em] text-slate-500">Painel da professora</p>
       </div>
     </div>
-    <div class="flex gap-2">
-      <input id="roomInput" value="room_12A" class="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm outline-none focus:border-violet-500 font-mono" />
-      <button id="joinBtn" class="bg-violet-600 hover:bg-violet-500 rounded-lg px-3 text-sm font-semibold">Entrar</button>
-    </div>
-    <div class="grid grid-cols-2 gap-2 text-center">
-      <div class="bg-slate-800 rounded-lg p-2"><p class="text-xl font-bold" id="statOnline">0</p><p class="text-[11px] text-slate-400">online</p></div>
-      <div class="bg-slate-800 rounded-lg p-2"><p class="text-xl font-bold" id="statChars">0</p><p class="text-[11px] text-slate-400">chars total</p></div>
-    </div>
-    <input id="search" placeholder="Pesquisar aluno..." class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm outline-none focus:border-violet-500" />
-    <p id="connLabel" class="text-xs text-red-300">● a ligar...</p>
-    <button id="snapshotBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2 text-sm">Pedir snapshot à turma</button>
-    <button id="freezeBtn" class="mt-auto bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold">Congelar turma</button>
-  </aside>
-
-  <!-- Main -->
-  <main class="flex-1 flex flex-col min-w-0">
-    <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-800">
-      <h2 class="font-semibold">Alunos em direto</h2>
-      <span id="roomBadge" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">● sala aberta</span>
-      <span class="text-xs text-slate-500 ml-auto">Cartões leves + 1 Monaco de foco</span>
-    </header>
-    <div id="grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 p-4 overflow-auto"></div>
-    <section class="border-t border-slate-800 p-4 bg-slate-900/60">
-      <div class="flex items-center gap-2 mb-2">
-        <h3 class="font-semibold text-sm">Foco: <span id="focusName" class="text-violet-300">—</span></h3>
-        <span id="focusMeta" class="text-xs text-slate-400 font-mono"></span>
+    <nav class="teacher-nav" aria-label="Navegação principal">
+      <button class="navtab active" data-tab="inicio" aria-current="page">Início</button>
+      <button class="navtab" data-tab="alunos">Alunos</button>
+      <button class="navtab" data-tab="projetor">Projetor</button>
+      <button class="navtab" data-tab="tarefas">Tarefas</button>
+    </nav>
+    <div class="teacher-tools flex items-center gap-2">
+      <span class="connection-status" role="status" aria-live="polite" title="Estado da ligação ao servidor">
+        <span id="connDot" class="w-2 h-2 rounded-full bg-red-500" aria-hidden="true"></span>
+        <span id="connLabel" class="connection-label">A ligar</span>
+      </span>
+      <button id="themeBtn" title="Mudar tema" aria-label="Mudar tema" class="w-9 h-9 grid place-items-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+        <svg id="icoSun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg id="icoMoon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+      </button>
+      <div class="relative">
+        <button id="bellBtn" title="Notificações" aria-label="Notificações" class="w-9 h-9 grid place-items-center rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M10.3 21a2 2 0 0 0 3.4 0"/></svg>
+          <span id="bellBadge" class="hidden absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[10px] font-bold grid place-items-center">0</span>
+        </button>
+        <div id="bellPanel" class="hidden absolute right-0 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3 z-50">
+          <p class="menu-label mb-2">NOTIFICAÇÕES</p>
+          <div id="bellList" class="space-y-1.5 max-h-64 overflow-auto text-xs text-slate-300"><p class="text-slate-500">Sem eventos ainda.</p></div>
+        </div>
       </div>
-      <div id="focusEditor" class="rounded-lg overflow-hidden border border-slate-800"></div>
+      <div class="teacher-avatar w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 grid place-items-center text-sm font-bold" role="img" aria-label="Perfil da professora" title="Professora">P</div>
+    </div>
+  </header>
+
+  <div id="mainViews" class="flex flex-1 min-h-0">
+
+    <!-- ===== ESQUERDA: ALUNOS ===== -->
+    <aside id="colLeft" class="sidebar w-64 shrink-0 hidden md:flex flex-col gap-3 p-3 border-r border-slate-800 bg-slate-900">
+      <div class="flex items-center">
+        <p class="menu-label">ALUNOS</p>
+        <span id="rosterCount" class="ml-auto text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">0</span>
+      </div>
+      <input id="search" placeholder="Pesquisar aluno..." class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-violet-500" />
+      <div id="studentList" class="flex-1 overflow-auto space-y-1"></div>
+      <div class="rounded-lg bg-slate-800/60 border border-slate-800 p-3">
+        <p class="menu-label mb-1">SESSÃO ATUAL</p>
+        <p class="text-sm font-semibold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span id="sessRoom">room_12A</span></p>
+        <p id="sessCount" class="text-xs text-slate-500 mt-0.5">0 alunos conectados</p>
+      </div>
+      <button id="inviteBtn" class="bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold">+ Novo aluno</button>
+      <div class="relative">
+        <button id="settingsBtn" class="w-full text-left text-sm text-slate-400 hover:text-slate-200 px-1 py-1">⚙ Definições</button>
+        <div id="settingsMenu" class="hidden absolute bottom-full left-0 mb-1 w-64 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3 z-50 space-y-2">
+          <p class="menu-label">SALA</p>
+          <div class="flex gap-1">
+            <input id="roomInput" value="room_12A" class="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm outline-none focus:border-violet-500 font-mono" />
+            <button id="joinBtn" class="bg-violet-600 hover:bg-violet-500 rounded-lg px-3 text-sm font-semibold">Entrar</button>
+          </div>
+          <button id="snapshotBtn" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-1.5 text-xs">Pedir snapshot à turma</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== CENTRO: WORKSPACE ===== -->
+    <main id="colCenter" class="flex-1 flex flex-col min-w-0 min-h-0">
+      <div class="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800 shrink-0">
+        <div id="roomAvatar" class="w-10 h-10 rounded-full bg-violet-600 grid place-items-center font-bold text-lg shrink-0">R</div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h2 id="roomName" class="font-bold">room_12A</h2>
+            <span id="roomBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">● Online</span>
+          </div>
+          <p id="roomSub" class="text-xs text-slate-500">A programar no workspace...</p>
+        </div>
+      </div>
+
+      <section id="wspace" class="flex-1 flex flex-col min-h-0 overflow-auto">
+        <!-- barra de tabs do ficheiro -->
+        <div class="flex items-center gap-1 px-3 pt-2 shrink-0">
+          <div id="wfileTabs" class="flex items-center gap-1 overflow-x-auto" role="group" aria-label="Ficheiros do workspace"></div>
+          <button id="wnewBtn" title="Criar um novo ficheiro de exemplo" aria-label="Criar novo ficheiro" class="shrink-0 w-7 h-7 grid place-items-center rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 text-lg">+</button>
+          <div class="ml-auto flex items-center gap-1.5">
+            <span class="text-[11px] font-mono px-2 py-1 rounded bg-slate-800 text-slate-300">Python ▾</span>
+            <button id="wrunBtn" title="Executar (Ctrl+Enter)" class="w-7 h-7 grid place-items-center rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">▶</button>
+            <button id="wfullBtn" title="Ecrã inteiro para projetar (Esc para sair)" class="w-7 h-7 grid place-items-center rounded hover:bg-slate-800 text-slate-400 text-xs">⛶</button>
+            <div class="relative">
+              <button id="wmenuBtn" class="w-7 h-7 grid place-items-center rounded hover:bg-slate-800 text-slate-400">⋯</button>
+              <div id="wmenu" class="hidden absolute right-0 mt-1 w-52 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-1.5 z-50">
+                <button id="wdlBtn" class="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-800">Descarregar workspace.py</button>
+                <button id="wcopyBtn" class="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-800">Copiar código</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- editor + terminal -->
+        <div id="wcols" class="flex flex-col gap-2 p-3 pt-0">
+          <div id="weditor" class="h-64 rounded-lg overflow-hidden border border-slate-800"></div>
+          <div id="wspaceResize" class="workspace-resize" role="separator" aria-orientation="horizontal" aria-label="Redimensionar editor e terminal" aria-controls="weditor wterm" aria-valuemin="120" aria-valuenow="256" tabindex="0" title="Arrasta para ajustar o espaço do editor e do terminal"></div>
+          <div id="wterm" class="rounded-lg bg-black border border-slate-800 flex flex-col overflow-hidden">
+            <div class="flex items-center gap-2 px-3 py-1 border-b border-slate-800 text-xs text-slate-500">
+              <span class="flex gap-1.5">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              </span>
+              <span class="font-mono">Terminal</span>
+              <span id="wtime" class="ml-auto font-mono"></span>
+            </div>
+            <pre id="woutput" data-empty="1" class="h-28 overflow-auto px-3 py-2 text-xs text-emerald-100 font-mono">Terminal pronto. Escreve Python na linha &gt;&gt;&gt; ou prime ▶ Executar.</pre>
+            <div class="flex items-center gap-1.5 px-3 py-1.5 border-t border-slate-800 text-xs font-mono">
+              <span id="wps1" class="text-emerald-400 shrink-0">&gt;&gt;&gt; </span>
+              <input id="wcmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="escreve aqui… (Enter executa, ↑↓ histórico, Esc cancela)" class="flex-1 min-w-0 bg-transparent outline-none text-emerald-100 placeholder:text-slate-600" />
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===== VISTA ALUNOS: só o board ===== -->
+    <section id="viewAlunos" style="display:none" class="flex-1 min-w-0 min-h-0 flex-col overflow-auto p-4">
+      <div class="flex items-center gap-3 mb-3">
+        <h2 class="font-bold text-lg">Alunos</h2>
+        <span id="boardCount" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">0</span>
+        <input id="searchBoard" placeholder="Pesquisar aluno..." class="ml-auto bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-violet-500 w-56" />
+      </div>
+      <div id="boardGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+      <div id="boardFocus" class="hidden mt-4 rounded-xl border border-violet-500/40 bg-slate-900 p-3">
+        <div class="flex items-center gap-2 mb-1">
+          <p class="font-semibold text-sm"><span id="boardFocusName">—</span></p>
+          <span id="boardFocusMeta" class="text-[11px] text-slate-500 font-mono"></span>
+          <button id="boardFocusClose" class="ml-auto text-slate-500 hover:text-slate-200 text-xs">✕ fechar</button>
+        </div>
+        <div id="boardEditor" class="h-[50vh] rounded-lg overflow-hidden border border-slate-800"></div>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">Alunos entram em <code id="boardInvite" class="font-mono text-slate-400"></code></p>
     </section>
-  </main>
+
+    <!-- ===== DIREITA: INFO + AÇÕES + FOCO ===== -->
+    <aside id="colRight" class="sidebar w-72 shrink-0 hidden lg:flex flex-col gap-3 p-3 border-l border-slate-800 bg-slate-900 overflow-auto">
+      <div class="card rounded-xl border border-slate-800 bg-slate-900 p-3">
+        <div class="flex items-center gap-2">
+          <p class="menu-label">Resumo de tarefas</p>
+          <span id="homeTaskCount" class="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">0</span>
+        </div>
+        <p id="homeTaskSummary" class="mt-2 text-xs text-slate-500">Ainda não há tarefas nesta sala.</p>
+        <button id="homeTasksOpen" class="mt-3 w-full rounded-lg border border-slate-700 bg-slate-800 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700">Abrir painel de tarefas</button>
+      </div>
+      <div class="card rounded-xl border border-slate-800 bg-slate-900 p-3">
+        <div class="flex items-center gap-2 mb-2">
+          <p class="menu-label">👤 Informações do Aluno</p>
+          <button id="roomEditBtn" title="Mudar de sala" class="ml-auto text-slate-500 hover:text-slate-200 text-xs">✎</button>
+        </div>
+        <div class="flex flex-col items-center py-1">
+          <div id="infoAvatar" class="w-12 h-12 rounded-full bg-violet-600 grid place-items-center font-bold text-xl">R</div>
+          <p id="infoName" class="font-bold text-sm mt-1">room_12A</p>
+          <p id="infoStatus" class="text-[11px] text-emerald-300">● Online</p>
+        </div>
+        <div class="mt-2 space-y-1.5 text-xs">
+          <div class="flex justify-between"><span class="text-slate-500">🎓 Turma</span><span id="infoRoom" class="font-mono">room_12A</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">👥 Total de alunos</span><span id="infoTotal">0</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">⏱ Tempo de sessão</span><span id="infoTime">—</span></div>
+        </div>
+      </div>
+
+      <div class="card rounded-xl border border-slate-800 bg-slate-900 p-3">
+        <p class="menu-label mb-2">Ações rápidas</p>
+        <div class="space-y-2">
+          <button id="qRun" class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 text-xs font-bold">▶ Executar (Ctrl+Enter)</button>
+          <button id="qFull" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2 text-xs">⛶ Ecrã inteiro</button>
+          <button id="qClear" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2 text-xs">🗑 Limpar terminal</button>
+          <button id="freezeBtn" class="w-full bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-xs font-semibold">Congelar turma</button>
+        </div>
+      </div>
+
+      <div class="card rounded-xl border border-slate-800 bg-slate-900 p-3">
+        <div class="flex items-center gap-2 mb-2">
+          <p class="menu-label">🎯 Foco</p>
+          <select id="focusSelect" class="ml-auto max-w-[110px] bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-xs outline-none"></select>
+          <button id="focusClear" title="Limpar foco" class="text-slate-500 hover:text-slate-200 text-xs">✕</button>
+        </div>
+        <div id="focusEmpty" class="rounded-lg bg-violet-600/20 border border-violet-500/30 p-3 text-xs text-slate-300 flex gap-2">
+          <span>💡</span><span>Seleciona um aluno para ver o código em direto...</span>
+        </div>
+        <div id="focusWrap" class="hidden">
+          <p class="text-sm font-semibold"><span id="focusName">—</span></p>
+          <p id="focusMeta" class="text-[11px] text-slate-500 font-mono mb-1"></p>
+          <div id="focusEditor" class="h-48 rounded-lg overflow-hidden border border-slate-800"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <section id="tasksView" class="hidden flex-1 min-h-0 min-w-0 overflow-auto p-4 lg:p-6" aria-labelledby="tasksHeading">
+    <div class="mx-auto grid w-full max-w-6xl content-start gap-4 xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
+      <div class="card h-fit rounded-xl border border-slate-800 bg-slate-900 p-4">
+        <div class="mb-4 flex items-center gap-3">
+          <div class="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/15 text-lg text-violet-300" aria-hidden="true">✎</div>
+          <div class="min-w-0">
+            <h2 id="tasksHeading" class="font-semibold">Tarefas da turma</h2>
+            <p id="taskRoomLabel" class="mt-0.5 truncate text-xs font-mono text-slate-500">room_12A</p>
+          </div>
+        </div>
+        <form id="taskForm" class="grid gap-3">
+          <label for="taskTitle" class="text-xs font-medium text-slate-400">Título</label>
+          <input id="taskTitle" maxlength="120" required placeholder="Ex.: Função para calcular médias" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500" />
+          <label for="taskDescription" class="text-xs font-medium text-slate-400">Instruções</label>
+          <textarea id="taskDescription" maxlength="2000" required rows="5" placeholder="Descreve o que os alunos devem fazer..." class="w-full resize-y rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500"></textarea>
+          <p class="text-xs text-slate-500">O enunciado será incluído como comentário Python (#) no editor, sem substituir o código do aluno.</p>
+          <p id="taskFeedback" role="status" aria-live="polite" class="min-h-4 text-xs text-slate-400"></p>
+          <button id="taskPublishBtn" type="submit" class="rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Publicar tarefa</button>
+        </form>
+      </div>
+      <div id="taskList" class="min-w-0 space-y-3" aria-live="polite">
+        <p class="card rounded-xl border border-slate-800 bg-slate-900 p-6 text-center text-sm text-slate-500">Ainda não há tarefas publicadas nesta sala.</p>
+      </div>
+    </div>
+  </section>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
 <script>
+// ================= base =================
 const qs = new URLSearchParams(location.search);
 const roomInput = document.getElementById('roomInput');
 if (qs.get('room')) roomInput.value = qs.get('room');
 
-const socket = io();
-const students = new Map(); // socketId -> { name, language, code }
+let socket = null;
+try { socket = io(); } catch (e) { socket = null; }
+// Socket opcional: sem servidor a página continua 100% utilizável para
+// programar/projetar — só o live dos alunos fica desligado.
+function emitSock(ev, data) { try { if (socket && socket.connected) socket.emit(ev, data); } catch (e) {} }
+function onSock(ev, fn) { try { if (socket) socket.on(ev, fn); } catch (e) {} }
+const students = new Map(); // studentId -> { name, language, code, online, updatedAt }
 let focusId = null;
 let focusEditor = null;
+let boardEditor = null;
 let frozen = false;
+let sessionStart = Date.now();
+let lastRoomT = roomInput.value;
+let unread = 0;
+let prevOnline = new Set();
+const AV_COLORS = ['#7c3aed', '#2563eb', '#059669', '#ea580c', '#db2777', '#0891b2'];
+function avColor(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
+function escapeHtml(t) { return String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function fmtDur(ms) { const m = Math.floor(ms / 60000); if (m < 1) return 'agora mesmo'; const h = Math.floor(m / 60); return h ? h + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + 'm'; }
+function tickClock() { document.getElementById('infoTime').textContent = fmtDur(Date.now() - sessionStart); }
+setInterval(tickClock, 20000);
 
-const grid = document.getElementById('grid');
-const connLabel = document.getElementById('connLabel');
-socket.on('connect', () => { connLabel.textContent = '● ligada'; connLabel.className = 'text-xs text-emerald-300'; join(); });
-socket.on('disconnect', () => { connLabel.textContent = '● desligada'; connLabel.className = 'text-xs text-red-300'; });
+// ---------- tema claro/escuro ----------
+function applyThemeT(mode) {
+  const light = mode === 'light';
+  document.body.classList.toggle('light', light);
+  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+  try { localStorage.setItem('ccl-teacher-theme', light ? 'light' : 'dark'); } catch (e) {}
+  document.getElementById('icoSun').classList.toggle('hidden', !light);
+  document.getElementById('icoMoon').classList.toggle('hidden', light);
+  if (window.monaco) monaco.editor.setTheme(light ? 'vs' : 'vs-dark');
+}
+let savedThemeT = 'dark';
+try { savedThemeT = localStorage.getItem('ccl-teacher-theme') || 'dark'; } catch (e) {}
+applyThemeT(savedThemeT === 'light' ? 'light' : 'dark');
+document.getElementById('themeBtn').onclick = () => applyThemeT(document.body.classList.contains('light') ? 'dark' : 'light');
 
-function join() {
+// ---------- tabs = vistas (cada uma mostra só a sua secção) ----------
+// Início: tudo (dashboard) • Alunos: roster + foco (código grande)
+// Projetor e tarefas focam no workspace da professora.
+function showCol(id, show) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = show ? '' : 'none';
+}
+function setTab(name) {
+  document.querySelectorAll('.navtab').forEach(b => {
+    const active = b.dataset.tab === name;
+    b.classList.toggle('active', active);
+    if (active) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  const isAlunos = name === 'alunos';
+  document.getElementById('mainViews').classList.toggle('hidden', name === 'tarefas');
+  document.getElementById('viewAlunos').style.display = isAlunos ? 'flex' : 'none';
+  showCol('colLeft', name === 'inicio');
+  showCol('colCenter', name === 'inicio' || name === 'projetor');
+  showCol('colRight', name === 'inicio');
+  const tasksView = document.getElementById('tasksView');
+  tasksView.classList.toggle('hidden', name !== 'tarefas');
+  tasksView.classList.toggle('flex', name === 'tarefas');
+  const fe = document.getElementById('focusEditor');
+  if (name === 'alunos') { fe.classList.remove('h-48'); fe.classList.add('h-[55vh]'); }
+  else { fe.classList.add('h-48'); fe.classList.remove('h-[55vh]'); }
+  if (name === 'tarefas') {
+    const t = document.getElementById('tasksView');
+    t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    t.style.boxShadow = '0 0 0 2px #8b5cf6';
+    setTimeout(() => { t.style.boxShadow = ''; }, 1200);
+    setTimeout(() => { const title = document.getElementById('taskTitle'); if (title) title.focus(); }, 350);
+  }
+  let _fe = null, _we = null, _be = null;
+  try { _fe = focusEditor; } catch (e) {}
+  try { _we = weditor; } catch (e) {}
+  try { _be = boardEditor; } catch (e) {}
+  setTimeout(() => { try { if (_fe) _fe.layout(); if (_we) _we.layout(); if (_be) _be.layout(); } catch (e) {} }, 60);
+  try { localStorage.setItem('ccl-teacher-tab', name); } catch (e) {}
+}
+document.querySelectorAll('.navtab').forEach(b => { b.onclick = () => setTab(b.dataset.tab); });
+document.getElementById('homeTasksOpen').onclick = () => {
+  const tasksTab = document.querySelector('.navtab[data-tab="tarefas"]');
+  if (tasksTab) tasksTab.click();
+};
+
+// ---------- notificações ----------
+function logEvent(text) {
+  unread++;
+  const badge = document.getElementById('bellBadge');
+  badge.textContent = unread > 9 ? '9+' : unread;
+  badge.classList.remove('hidden');
+  const list = document.getElementById('bellList');
+  const ph = list.querySelector('p');
+  if (ph && list.children.length === 1) list.innerHTML = '';
+  const d = document.createElement('div');
+  d.className = 'rounded bg-slate-800/70 px-2 py-1.5';
+  d.innerHTML = '<span class="text-slate-500 font-mono">' + new Date().toLocaleTimeString() + '</span> ' + escapeHtml(text);
+  list.prepend(d);
+  while (list.children.length > 12) list.lastChild.remove();
+}
+document.getElementById('bellBtn').onclick = (e) => {
+  e.stopPropagation();
+  document.getElementById('bellPanel').classList.toggle('hidden');
+  unread = 0;
+  document.getElementById('bellBadge').classList.add('hidden');
+};
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('bellPanel').classList.contains('hidden') && !document.getElementById('bellPanel').contains(e.target)) document.getElementById('bellPanel').classList.add('hidden');
+  const wm = document.getElementById('wmenu');
+  if (!wm.classList.contains('hidden') && !wm.contains(e.target) && e.target.id !== 'wmenuBtn') wm.classList.add('hidden');
+  const sm = document.getElementById('settingsMenu');
+  if (!sm.classList.contains('hidden') && !sm.contains(e.target) && e.target.id !== 'settingsBtn') sm.classList.add('hidden');
+});
+
+// ---------- ligação e sala ----------
+const connDot = document.getElementById('connDot');
+function setConnectionStatus(connected, label) {
+  connDot.className = 'w-2 h-2 rounded-full ' + (connected ? 'bg-emerald-400' : 'bg-red-500');
+  document.getElementById('connLabel').textContent = label;
+}
+onSock('connect', () => { setConnectionStatus(true, 'Ligada'); join(); });
+onSock('disconnect', () => setConnectionStatus(false, 'Sem ligação'));
+onSock('connect_error', () => setConnectionStatus(false, 'Indisponível'));
+if (!socket) setConnectionStatus(false, 'Indisponível');
+
+let taskHistory = [];
+let taskHistoryRoom = '';
+function taskHistoryKey(room) { return 'ccl-teacher-tasks:' + room; }
+function loadTaskHistory(room) {
+  taskHistoryRoom = room;
+  try {
+    const saved = JSON.parse(localStorage.getItem(taskHistoryKey(room)) || '[]');
+    taskHistory = Array.isArray(saved) ? saved.filter(task =>
+      task && typeof task.id === 'string' && typeof task.title === 'string' &&
+      typeof task.description === 'string' && Number.isFinite(task.createdAt)
+    ).map(task => ({ ...task, submissions: Array.isArray(task.submissions) ? task.submissions : [] })).slice(0, 20) : [];
+  } catch (error) {
+    taskHistory = [];
+  }
+  renderTaskHistory();
+}
+function renderTaskHistory() {
+  const list = document.getElementById('taskList');
+  list.textContent = '';
+  updateHomeTaskSummary();
+  if (!taskHistory.length) {
+    const empty = document.createElement('p');
+    empty.className = 'py-3 text-center text-xs text-slate-500';
+    empty.textContent = 'Ainda não há tarefas publicadas nesta sala.';
+    list.appendChild(empty);
+    return;
+  }
+  taskHistory.forEach(task => {
+    const submissions = Array.isArray(task.submissions) ? task.submissions : [];
+    const latestByStudent = new Map();
+    submissions.forEach(submission => latestByStudent.set(submission.studentId, submission));
+    const people = new Map([...students.entries()].map(([id, student]) => [id, { id, name: student.name, online: student.online }]));
+    latestByStudent.forEach((submission, id) => {
+      if (!people.has(id)) people.set(id, { id, name: submission.studentName || 'Aluno', online: false });
+    });
+    const card = document.createElement('article');
+    card.className = 'task-card p-3';
+    const heading = document.createElement('div');
+    heading.className = 'flex items-start gap-2';
+    const title = document.createElement('h4');
+    title.className = 'min-w-0 flex-1 text-sm font-semibold';
+    title.textContent = task.title;
+    const status = document.createElement('span');
+    const deliveredCount = latestByStudent.size;
+    const totalCount = Math.max(people.size, deliveredCount);
+    status.className = 'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ' +
+      (deliveredCount ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700 text-slate-300');
+    status.textContent = deliveredCount + ' / ' + totalCount + ' entregaram';
+    heading.append(title, status);
+    const description = document.createElement('p');
+    description.className = 'mt-1 whitespace-pre-wrap break-words text-xs text-slate-400';
+    description.textContent = task.description;
+    const when = document.createElement('p');
+    when.className = 'mt-2 text-[10px] text-slate-500';
+    when.textContent = 'Publicada em ' + new Date(task.createdAt).toLocaleString();
+    const deliveryList = document.createElement('div');
+    deliveryList.className = 'mt-3 space-y-2';
+    const sectionTitle = document.createElement('h5');
+    sectionTitle.className = 'text-xs font-semibold text-slate-300';
+    sectionTitle.textContent = 'Entregas dos alunos';
+    deliveryList.appendChild(sectionTitle);
+    if (!people.size) {
+      const noStudents = document.createElement('p');
+      noStudents.className = 'text-xs text-slate-500';
+      noStudents.textContent = 'Ainda não há alunos registados nesta sala.';
+      deliveryList.appendChild(noStudents);
+    }
+    [...people.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt')).forEach(person => {
+      const attempts = submissions.filter(submission => submission.studentId === person.id);
+      const row = document.createElement('details');
+      row.className = 'submission-card p-2';
+      const summary = document.createElement('summary');
+      summary.className = 'flex cursor-pointer list-none items-start gap-2 text-xs';
+      const studentName = document.createElement('span');
+      studentName.className = 'min-w-0 flex-1 font-medium';
+      studentName.textContent = person.name;
+      const deliveryState = document.createElement('span');
+      deliveryState.className = attempts.length
+        ? 'text-emerald-400'
+        : (person.online ? 'text-amber-300' : 'text-slate-500');
+      deliveryState.textContent = attempts.length
+        ? 'Entregue • ' + new Date(attempts[attempts.length - 1].submittedAt).toLocaleString()
+        : (person.online ? 'Por entregar • online' : 'Por entregar • offline');
+      summary.append(studentName, deliveryState);
+      row.appendChild(summary);
+      attempts.slice().reverse().forEach((submission, index) => {
+        const attempt = document.createElement('div');
+        attempt.className = 'mt-2 border-t border-slate-700/60 pt-2';
+        const meta = document.createElement('p');
+        meta.className = 'mb-1 text-[10px] text-slate-500';
+        meta.textContent = (attempts.length > 1 ? 'Entrega ' + (attempts.length - index) + ' • ' : '') +
+          new Date(submission.submittedAt).toLocaleString() + ' • ' + submission.language +
+          ' • ' + submission.code.length + ' caracteres';
+        const code = document.createElement('pre');
+        code.className = 'submission-code';
+        code.textContent = submission.code;
+        attempt.append(meta, code);
+        row.appendChild(attempt);
+      });
+      deliveryList.appendChild(row);
+    });
+    card.append(heading, description, when, deliveryList);
+    list.appendChild(card);
+  });
+}
+function updateHomeTaskSummary() {
+  const count = document.getElementById('homeTaskCount');
+  const summary = document.getElementById('homeTaskSummary');
+  if (!count || !summary) return;
+  count.textContent = String(taskHistory.length);
+  if (!taskHistory.length) {
+    summary.textContent = 'Ainda não há tarefas nesta sala.';
+    return;
+  }
+  const latest = taskHistory[0];
+  const deliveries = new Set((latest.submissions || []).map(submission => submission.studentId)).size;
+  summary.textContent = 'Mais recente: ' + latest.title + ' — ' + deliveries + ' de ' + students.size + ' aluno(s) entregaram.';
+}
+function saveTaskHistory() {
+  try { localStorage.setItem(taskHistoryKey(taskHistoryRoom), JSON.stringify(taskHistory)); } catch (error) {}
+}
+function handleClassTasks(tasks) {
+  if (!Array.isArray(tasks)) return;
+  taskHistory = tasks.filter(task => task && typeof task.id === 'string' &&
+    typeof task.title === 'string' && typeof task.description === 'string')
+    .map(task => ({ ...task, submissions: Array.isArray(task.submissions) ? task.submissions : [] }))
+    .slice(-20).reverse();
+  taskHistoryRoom = roomInput.value;
+  saveTaskHistory();
+  renderTaskHistory();
+}
+function handlePublishedTask(task) {
+  if (!task || task.roomId !== roomInput.value || typeof task.id !== 'string' ||
+      typeof task.title !== 'string' || typeof task.description !== 'string') return;
+  if (taskHistoryRoom !== task.roomId) loadTaskHistory(task.roomId);
+  const existingIndex = taskHistory.findIndex(entry => entry.id === task.id);
+  if (existingIndex >= 0) {
+    taskHistory[existingIndex] = { ...taskHistory[existingIndex], ...task,
+      submissions: Array.isArray(task.submissions) ? task.submissions : taskHistory[existingIndex].submissions || [] };
+  } else {
+    taskHistory.unshift({ ...task, submissions: Array.isArray(task.submissions) ? task.submissions : [] });
+  }
+  taskHistory = taskHistory.slice(0, 20);
+  renderTaskHistory();
+  saveTaskHistory();
+  document.getElementById('taskFeedback').textContent =
+    'Tarefa publicada para ' + [...students.values()].filter(student => student.online).length + ' aluno(s) ligado(s).';
+  document.getElementById('taskPublishBtn').disabled = false;
+  document.getElementById('taskPublishBtn').textContent = 'Publicar tarefa';
+  document.getElementById('taskForm').reset();
+  if (existingIndex < 0) logEvent('Tarefa publicada: ' + task.title);
+}
+function handleTaskSubmission({ taskId, submission } = {}) {
+  const task = taskHistory.find(entry => entry.id === taskId);
+  if (!task || !submission || typeof submission.id !== 'string') return;
+  if (!Array.isArray(task.submissions)) task.submissions = [];
+  if (task.submissions.some(entry => entry.id === submission.id)) return;
+  task.submissions.push(submission);
+  renderTaskHistory();
+  saveTaskHistory();
+  logEvent('Entrega recebida de ' + (submission.studentName || 'aluno') + '.');
+}
+document.getElementById('taskForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const title = document.getElementById('taskTitle').value.trim();
+  const description = document.getElementById('taskDescription').value.trim();
+  if (!title || !description) {
+    document.getElementById('taskFeedback').textContent = 'Preenche o título e as instruções da tarefa.';
+    return;
+  }
+  if (!socket || !socket.connected) {
+    document.getElementById('taskFeedback').textContent = 'Sem ligação ao servidor. A tarefa não foi enviada.';
+    return;
+  }
+  const button = document.getElementById('taskPublishBtn');
+  button.disabled = true;
+  button.textContent = 'A publicar…';
+  document.getElementById('taskFeedback').textContent = 'A enviar para a sala ' + roomInput.value + '…';
+  socket.emit('publish_task', { roomId: roomInput.value, title, description });
+});
+onSock('teacher_task', handlePublishedTask);
+onSock('class_tasks', handleClassTasks);
+onSock('task_submission', handleTaskSubmission);
+onSock('task_error', ({ message } = {}) => {
+  document.getElementById('taskPublishBtn').disabled = false;
+  document.getElementById('taskPublishBtn').textContent = 'Publicar tarefa';
+  document.getElementById('taskFeedback').textContent = message || 'Não foi possível publicar a tarefa.';
+});
+
+function joinUI() {
   const room = roomInput.value;
-  document.getElementById('roomLabelSide').textContent = room;
-  document.getElementById('roomBadge').textContent = '● ' + room;
-  socket.emit('join_room', { roomId: room, name: 'Professora', role: 'teacher' });
-  // pede estado atual a quem já estava a escrever (caso entre a meio)
-  socket.emit('request_snapshot', { roomId: room });
+  if (room !== lastRoomT) { sessionStart = Date.now(); prevOnline = new Set(); lastRoomT = room; }
+  document.getElementById('sessRoom').textContent = room;
+  document.getElementById('roomName').textContent = room;
+  document.getElementById('infoRoom').textContent = room;
+  document.getElementById('taskRoomLabel').textContent = room;
+  document.getElementById('roomAvatar').textContent = (room.trim()[0] || 'R').toUpperCase();
+  document.getElementById('roomBadge').textContent = frozen ? '■ Congelada' : '● Online';
+  // Save the current room before restoring that room's separate examples.
+  if (typeof weditor !== 'undefined' && weditor) {
+    if (window._wroom && window._wroom !== room) {
+      saveWorkspaceForRoom(window._wroom);
+      const roomWorkspace = loadWorkspaceForRoom(room);
+      workspaceFiles = roomWorkspace.files;
+      activeWorkspaceFileId = roomWorkspace.activeFileId;
+      weditor.setValue(getActiveWorkspaceFile().code);
+      renderWorkspaceFiles();
+    } else {
+      saveWorkspaceForRoom(room);
+    }
+  }
+  if (taskHistoryRoom !== room) loadTaskHistory(room);
+  window._wroom = room;
+  tickClock();
+}
+function join() {
+  joinUI();
+  emitSock('join_room', { roomId: roomInput.value, name: 'Professora', role: 'teacher' });
+  emitSock('request_snapshot', { roomId: roomInput.value });
 }
 document.getElementById('joinBtn').onclick = join;
-document.getElementById('snapshotBtn').onclick = () => socket.emit('request_snapshot', { roomId: roomInput.value });
-// Congelar/descongelar: o servidor guarda por sala e propaga freeze_state
+document.getElementById('snapshotBtn').onclick = () => {
+  if (!socket || !socket.connected) { logEvent('Sem ligação ao servidor — liga o servidor para pedir snapshot.'); return; }
+  emitSock('request_snapshot', { roomId: roomInput.value });
+};
+document.getElementById('settingsBtn').onclick = (e) => { e.stopPropagation(); document.getElementById('settingsMenu').classList.toggle('hidden'); };
+document.getElementById('roomEditBtn').onclick = () => {
+  const r = prompt('Mudar de sala:', roomInput.value);
+  if (r && r.trim()) { roomInput.value = r.trim(); join(); }
+};
+document.getElementById('inviteBtn').onclick = async () => {
+  const link = location.origin + '/?room=' + encodeURIComponent(roomInput.value);
+  try { await navigator.clipboard.writeText(link); } catch (e) {
+    const ta = document.createElement('textarea'); ta.value = link; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) {}
+    ta.remove();
+  }
+  const b = document.getElementById('inviteBtn');
+  const old = b.textContent;
+  b.textContent = 'Link copiado ✓';
+  setTimeout(() => { b.textContent = old; }, 2000);
+};
+
+// ---------- congelar ----------
 function updateFreezeUI() {
   const b = document.getElementById('freezeBtn');
   b.textContent = frozen ? 'Descongelar turma' : 'Congelar turma';
   b.className = frozen
-    ? 'mt-auto bg-red-600 hover:bg-red-500 rounded-lg py-2 text-sm font-semibold'
-    : 'mt-auto bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold';
-  document.getElementById('roomBadge').textContent = frozen ? '■ ' + roomInput.value + ' (congelada)' : '● ' + roomInput.value;
+    ? 'w-full bg-red-600 hover:bg-red-500 rounded-lg py-2 text-xs font-semibold'
+    : 'w-full bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-xs font-semibold';
+  document.getElementById('roomBadge').textContent = frozen ? '■ Congelada' : '● Online';
+  document.getElementById('roomSub').textContent = frozen ? 'Turma congelada — editores só de leitura.' : 'A programar no workspace...';
 }
-document.getElementById('freezeBtn').onclick = () => socket.emit('freeze', { roomId: roomInput.value, frozen: !frozen });
-socket.on('freeze_state', ({ frozen: f }) => { frozen = f === true; updateFreezeUI(); });
+document.getElementById('freezeBtn').onclick = () => {
+  if (!socket || !socket.connected) { logEvent('Sem ligação ao servidor — liga o servidor para congelar.'); return; }
+  emitSock('freeze', { roomId: roomInput.value, frozen: !frozen });
+};
+onSock('freeze_state', ({ frozen: f }) => {
+  const was = frozen;
+  frozen = f === true;
+  updateFreezeUI();
+  if (frozen !== was) logEvent(frozen ? 'Turma congelada.' : 'Turma descongelada.');
+});
 
-// ---- eventos live ----
-socket.on('room_state', (list) => {
+// ---- eventos live (roster inclui offline; chave = studentId persistente) ----
+function rosterCacheKey() { return 'ccl-roster:' + roomInput.value; }
+function saveRosterCache() {
+  try { localStorage.setItem(rosterCacheKey(), JSON.stringify([...students.entries()])); } catch (e) {}
+}
+onSock('room_state', (list) => {
+  const nowOnline = new Set(list.filter(s => s.online !== false).map(s => s.studentId));
+  list.filter(s => s.online !== false && !prevOnline.has(s.studentId)).forEach(s => logEvent(s.name + ' entrou na sala.'));
+  [...prevOnline].filter(id => !nowOnline.has(id)).forEach(id => {
+    const s = students.get(id);
+    logEvent((s ? s.name : 'Aluno') + ' saiu.');
+  });
+  prevOnline = nowOnline;
   students.clear();
-  list.forEach(s => students.set(s.socketId, { name: s.name, language: s.language, code: s.code || '' }));
-  if (!focusId && list.length) focusId = list[0].socketId;
+  list.forEach(s => students.set(s.studentId, { name: s.name, language: s.language, code: s.code || '', online: s.online !== false, updatedAt: s.updatedAt || 0 }));
+  if (!focusId || !students.has(focusId)) focusId = [...students.keys()][0] || null;
+  saveRosterCache();
+  render();
+  renderTaskHistory();
+});
+onSock('code_update', ({ studentId, name, code, language }) => {
+  students.set(studentId, { name, language, code, online: true, updatedAt: Date.now() });
+  if (!focusId) focusId = studentId;
+  saveRosterCache();
   render();
 });
-socket.on('code_update', ({ socketId, name, code, language }) => {
-  students.set(socketId, { name, language, code });
-  if (!focusId) focusId = socketId;
-  render();
-});
-socket.on('student_left', ({ socketId }) => {
-  students.delete(socketId);
-  if (focusId === socketId) focusId = [...students.keys()][0] || null;
-  render();
+onSock('student_left', ({ studentId }) => {
+  const s = students.get(studentId);
+  if (s) { s.online = false; saveRosterCache(); render(); renderTaskHistory(); }
 });
 
-function escapeHtml(t){ return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// ================= render =================
+const list = document.getElementById('studentList');
 function render() {
   const q = document.getElementById('search').value.toLowerCase();
-  grid.innerHTML = '';
+  list.innerHTML = '';
   let totalChars = 0;
-  [...students.entries()].forEach(([id, s]) => {
+  let onlineCount = 0;
+  const entries = [...students.entries()].sort((a, b) => ((b[1].online ? 1 : 0) - (a[1].online ? 1 : 0)));
+  entries.forEach(([id, s]) => {
     totalChars += (s.code || '').length;
+    if (s.online) onlineCount++;
     if (!s.name.toLowerCase().includes(q)) return;
+    const b = document.createElement('button');
+    b.className = 'rowitem w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left border ' + (id === focusId ? 'active bg-violet-600/20 border-violet-500/50' : 'border-transparent hover:bg-slate-800');
+    b.innerHTML =
+      '<span class="w-8 h-8 rounded-full grid place-items-center text-xs font-bold shrink-0" style="background:' + avColor(id) + '">' + escapeHtml((s.name.trim()[0] || 'A').toUpperCase()) + '</span>' +
+      '<span class="min-w-0"><span class="block text-xs font-medium truncate">' + escapeHtml(s.name) + '</span>' +
+      '<span class="block text-[11px] ' + (s.online ? 'text-slate-500' : 'text-slate-600') + '">' + (s.online ? '● Online' : '○ Offline') + '</span></span>' +
+      '<span class="ml-auto text-slate-600">›</span>';
+    b.onclick = () => { focusId = id; render(); };
+    list.appendChild(b);
+  });
+  if (students.size === 0) list.innerHTML = '<p class="text-xs text-slate-500 px-1">Nenhum aluno ligado. Alunos: <code class="font-mono">/?room=' + escapeHtml(roomInput.value) + '</code></p>';
+  // ---- board da vista Alunos: só cartões ----
+  const bg = document.getElementById('boardGrid');
+  const qb = document.getElementById('searchBoard').value.toLowerCase();
+  bg.innerHTML = '';
+  entries.forEach(([id, s]) => {
+    if (!s.name.toLowerCase().includes(qb)) return;
     const card = document.createElement('button');
-    card.className = 'text-left rounded-xl overflow-hidden transition border ' + (id === focusId ? 'bg-slate-900 border-violet-500' : 'bg-slate-900 border-slate-800 hover:border-violet-500');
+    card.className = 'text-left rounded-xl overflow-hidden border transition ' + (id === focusId ? 'bg-slate-900 border-violet-500' : 'bg-slate-900 border-slate-800 hover:border-violet-500');
     card.innerHTML =
       '<div class="flex items-center gap-2 px-3 py-2 border-b border-slate-800">' +
-        '<span class="w-2 h-2 rounded-full bg-emerald-400"></span>' +
-        '<span class="text-sm font-medium">' + escapeHtml(s.name) + '</span>' +
+        '<span class="w-8 h-8 rounded-full grid place-items-center text-xs font-bold shrink-0" style="background:' + avColor(id) + '">' + escapeHtml((s.name.trim()[0] || 'A').toUpperCase()) + '</span>' +
+        '<span class="min-w-0"><span class="block text-xs font-medium truncate">' + escapeHtml(s.name) + (s.online === false ? ' <span class="text-[10px] text-slate-500">(offline)</span>' : '') + '</span>' +
+        '<span class="block text-[11px] ' + (s.online ? 'text-slate-500' : 'text-slate-600') + '">' + (s.online ? '● Online' : '○ Offline') + '</span></span>' +
         '<span class="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">' + escapeHtml(s.language) + '</span>' +
       '</div>' +
       '<div class="mini-code p-3 h-28 text-slate-300">' + (escapeHtml((s.code || '').slice(0, 220)) || '<span class="text-slate-600">a aguardar código...</span>') + '</div>' +
-      '<div class="px-3 py-1.5 text-[11px] text-slate-500 border-t border-slate-800">' + (s.code || '').length + ' chars • live</div>';
-    card.onclick = () => { focusId = id; render(); };
-    grid.appendChild(card);
+      '<div class="px-3 py-1.5 text-[11px] text-slate-500 border-t border-slate-800">' + (s.code || '').length + ' chars • ' + (s.online === false ? 'offline' : 'live') + '</div>';
+    card.onclick = () => {
+      focusId = id;
+      document.getElementById('boardFocus').classList.remove('hidden');
+      render();
+      document.getElementById('boardFocus').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+    bg.appendChild(card);
   });
-  if (students.size === 0) grid.innerHTML = '<p class="text-sm text-slate-500 col-span-full">Nenhum aluno ligado. Alunos: abram <code class="font-mono">http://IP-DA-PROFESSORA:3000/?room=' + escapeHtml(roomInput.value) + '</code></p>';
-  document.getElementById('statOnline').textContent = students.size;
-  document.getElementById('statChars').textContent = totalChars;
-  // atualiza editor de foco
+  if (students.size === 0) bg.innerHTML = '<p class="text-sm text-slate-500 col-span-full">Nenhum aluno ainda. Partilha o link com a turma.</p>';
+  document.getElementById('boardCount').textContent = students.size + (students.size === 1 ? ' aluno' : ' alunos');
+  document.getElementById('boardInvite').textContent = location.origin + '/?room=' + roomInput.value;
+  document.getElementById('rosterCount').textContent = students.size;
+  document.getElementById('sessCount').textContent = onlineCount + (onlineCount === 1 ? ' aluno conectado' : ' alunos conectados');
+  document.getElementById('infoTotal').textContent = students.size;
+  // seletor de foco
+  const sel = document.getElementById('focusSelect');
+  sel.innerHTML = '<option value="">—</option>' + entries.map(([id, s]) => '<option value="' + escapeHtml(id) + '"' + (id === focusId ? ' selected' : '') + '>' + escapeHtml(s.name) + '</option>').join('');
+  // cartão de foco + info
   const f = students.get(focusId);
+  document.getElementById('focusEmpty').classList.toggle('hidden', !!f);
+  document.getElementById('focusWrap').classList.toggle('hidden', !f);
   document.getElementById('focusName').textContent = f ? f.name : '—';
-  document.getElementById('focusMeta').textContent = f ? (f.language + ' • ' + f.code.length + ' chars') : '';
+  document.getElementById('focusMeta').textContent = f ? (f.language + ' • ' + f.code.length + ' chars' + (f.online === false ? ' • OFFLINE' : '')) : '';
+  const av = document.getElementById('infoAvatar');
+  av.textContent = f ? (f.name.trim()[0] || 'A').toUpperCase() : (roomInput.value.trim()[0] || 'R').toUpperCase();
+  av.style.background = f ? avColor(focusId) : '#7c3aed';
+  document.getElementById('infoName').textContent = f ? f.name : roomInput.value;
+  const st = document.getElementById('infoStatus');
+  st.textContent = f ? (f.online === false ? '○ Offline' : '● Online') : '● Online';
+  st.className = 'text-[11px] ' + ((f && f.online === false) ? 'text-slate-500' : 'text-emerald-300');
   if (focusEditor && f) {
     if (focusEditor.getValue() !== f.code) focusEditor.setValue(f.code);
-    monaco.editor.setModelLanguage(focusEditor.getModel(), f.language || 'javascript');
+    if (window.monaco) monaco.editor.setModelLanguage(focusEditor.getModel(), f.language || 'python');
+  }
+  // foco do board (vista Alunos)
+  document.getElementById('boardFocusName').textContent = f ? f.name : '—';
+  document.getElementById('boardFocusMeta').textContent = f ? (f.language + ' • ' + f.code.length + ' chars' + (f.online === false ? ' • OFFLINE' : '')) : '';
+  if (!f) document.getElementById('boardFocus').classList.add('hidden');
+  if (boardEditor && f) {
+    if (boardEditor.getValue() !== f.code) boardEditor.setValue(f.code);
+    if (window.monaco) monaco.editor.setModelLanguage(boardEditor.getModel(), f.language || 'python');
   }
 }
 document.getElementById('search').oninput = render;
+document.getElementById('searchBoard').oninput = render;
+document.getElementById('boardFocusClose').onclick = () => document.getElementById('boardFocus').classList.add('hidden');
+document.getElementById('focusSelect').onchange = (e) => { focusId = e.target.value || null; render(); };
+document.getElementById('focusClear').onclick = () => { focusId = null; render(); };
+// Mostra o último roster guardado neste PC (inclui offline) até chegar o estado live
+try {
+  const cached = JSON.parse(localStorage.getItem('ccl-roster:' + roomInput.value) || '[]');
+  cached.forEach(([id, s]) => students.set(id, { name: s.name, language: s.language, code: s.code || '', online: false, updatedAt: s.updatedAt || 0 }));
+  if (cached.length) { focusId = cached[0][0]; render(); }
+} catch (e) {}
+
+// ================= workspace da professora (local, para projetar) =================
+let weditor = null;
+let wpy = null;
+let workspaceFiles = [];
+let activeWorkspaceFileId = 'workspace';
+function workspaceFilesKey(room) { return 'ccl-teacher-files:' + room; }
+function defaultWorkspaceCode() {
+  return '# Workspace da professora — para programar com o projetor.\n\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
+}
+function loadWorkspaceForRoom(room) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(workspaceFilesKey(room)) || 'null');
+    if (saved && Array.isArray(saved.files)) {
+      const files = saved.files.filter(file => file && typeof file.id === 'string' && typeof file.name === 'string' && typeof file.code === 'string');
+      if (files.length) {
+        const activeFileId = files.some(file => file.id === saved.activeFileId)
+          ? saved.activeFileId
+          : files[0].id;
+        return { files, activeFileId };
+      }
+    }
+    const legacyCode = localStorage.getItem('ccl-teacher:' + room);
+    return {
+      files: [{ id: 'workspace', name: 'workspace.py', code: legacyCode || defaultWorkspaceCode() }],
+      activeFileId: 'workspace'
+    };
+  } catch (error) {
+    return { files: [{ id: 'workspace', name: 'workspace.py', code: defaultWorkspaceCode() }], activeFileId: 'workspace' };
+  }
+}
+function getActiveWorkspaceFile() {
+  return workspaceFiles.find(file => file.id === activeWorkspaceFileId) || workspaceFiles[0];
+}
+function saveWorkspaceForRoom(room) {
+  const activeFile = getActiveWorkspaceFile();
+  if (!activeFile) return;
+  if (weditor && window._wroom === room) activeFile.code = weditor.getValue();
+  try {
+    localStorage.setItem(workspaceFilesKey(room), JSON.stringify({ files: workspaceFiles, activeFileId: activeFile.id }));
+    const legacyWorkspace = workspaceFiles.find(file => file.id === 'workspace');
+    if (legacyWorkspace) localStorage.setItem('ccl-teacher:' + room, legacyWorkspace.code);
+  } catch (error) {}
+}
+function renderWorkspaceFiles() {
+  const tabs = document.getElementById('wfileTabs');
+  tabs.textContent = '';
+  workspaceFiles.forEach(file => {
+    const tab = document.createElement('div');
+    tab.className = 'flex items-center border rounded-t-lg ' + (file.id === activeWorkspaceFileId ? 'bg-slate-900 border-slate-800 border-b-0' : 'border-transparent');
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = 'wfile-tab ' + (file.id === activeWorkspaceFileId ? 'active' : '');
+    select.setAttribute('aria-pressed', String(file.id === activeWorkspaceFileId));
+    select.title = 'Abrir ' + file.name + ' (duplo clique para renomear)';
+    const icon = document.createElement('span');
+    icon.className = 'text-slate-500';
+    icon.textContent = '🐍';
+    const name = document.createElement('span');
+    name.className = 'wfile-tab-name font-mono';
+    name.textContent = file.name;
+    select.append(icon, name);
+    select.onclick = () => switchWorkspaceFile(file.id);
+    select.ondblclick = (event) => {
+      event.preventDefault();
+      renameWorkspaceFile(file.id);
+    };
+    tab.appendChild(select);
+    if (workspaceFiles.length > 1) {
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'wfile-close mr-1';
+      close.setAttribute('aria-label', 'Fechar ' + file.name);
+      close.title = 'Fechar ficheiro';
+      close.textContent = '×';
+      close.onclick = () => closeWorkspaceFile(file.id);
+      tab.appendChild(close);
+    }
+    tabs.appendChild(tab);
+  });
+  const active = getActiveWorkspaceFile();
+  if (active) {
+    document.getElementById('wdlBtn').textContent = 'Descarregar ' + active.name;
+    document.getElementById('wnewBtn').title = 'Criar um novo ficheiro de exemplo';
+  }
+}
+function switchWorkspaceFile(fileId) {
+  if (!weditor || fileId === activeWorkspaceFileId) return;
+  const next = workspaceFiles.find(file => file.id === fileId);
+  if (!next) return;
+  const current = getActiveWorkspaceFile();
+  if (current) current.code = weditor.getValue();
+  activeWorkspaceFileId = next.id;
+  weditor.setValue(next.code);
+  renderWorkspaceFiles();
+  saveWorkspaceForRoom(roomInput.value);
+  weditor.focus();
+}
+function createWorkspaceFile() {
+  if (!weditor) return;
+  const exampleNumber = workspaceFiles.reduce((max, file) => {
+    const match = file.name.match(/^exemplo-(\d+)\.py$/i);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 1) + 1;
+  const file = {
+    id: 'file-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
+    name: 'exemplo-' + exampleNumber + '.py',
+    code: '# Exemplo ' + exampleNumber + '\n\n'
+  };
+  const current = getActiveWorkspaceFile();
+  if (current) current.code = weditor.getValue();
+  workspaceFiles.push(file);
+  activeWorkspaceFileId = file.id;
+  weditor.setValue(file.code);
+  renderWorkspaceFiles();
+  saveWorkspaceForRoom(roomInput.value);
+  weditor.focus();
+}
+function renameWorkspaceFile(fileId) {
+  const file = workspaceFiles.find(entry => entry.id === fileId);
+  if (!file) return;
+  const input = prompt('Nome do ficheiro:', file.name);
+  if (input === null || !input.trim()) return;
+  let name = input.trim().replace(/[\\/:*?"<>|]/g, '-');
+  if (!/\.py$/i.test(name)) name += '.py';
+  if (workspaceFiles.some(entry => entry.id !== fileId && entry.name.toLowerCase() === name.toLowerCase())) {
+    alert('Já existe um ficheiro com esse nome.');
+    return;
+  }
+  file.name = name;
+  renderWorkspaceFiles();
+  saveWorkspaceForRoom(roomInput.value);
+}
+function closeWorkspaceFile(fileId) {
+  if (workspaceFiles.length < 2) return;
+  const index = workspaceFiles.findIndex(file => file.id === fileId);
+  if (index < 0) return;
+  const file = workspaceFiles[index];
+  if (!confirm('Fechar ' + file.name + '? O ficheiro será removido deste workspace.')) return;
+  if (fileId === activeWorkspaceFileId && weditor) file.code = weditor.getValue();
+  workspaceFiles.splice(index, 1);
+  if (fileId === activeWorkspaceFileId) {
+    const next = workspaceFiles[Math.min(index, workspaceFiles.length - 1)];
+    activeWorkspaceFileId = next.id;
+    weditor.setValue(next.code);
+  }
+  renderWorkspaceFiles();
+  saveWorkspaceForRoom(roomInput.value);
+}
+const wgetPy = () => { if (!wpy) wpy = loadPyodide(); return wpy; };
+function termPrint(line) {
+  const out = document.getElementById('woutput');
+  if (out.dataset.empty === '1') { out.textContent = ''; out.dataset.empty = ''; }
+  out.textContent += line + '\n';
+  out.scrollTop = out.scrollHeight;
+}
+function termReset() {
+  const out = document.getElementById('woutput');
+  out.dataset.empty = '1';
+  out.textContent = 'Terminal pronto. Prime ▶ Executar (usa input() à vontade — vai pedir os valores).';
+}
+const wspaceResize = document.getElementById('wspaceResize');
+const wcols = document.getElementById('wcols');
+const weditorElement = document.getElementById('weditor');
+function isWorkspaceFullscreen() { return document.fullscreenElement === document.getElementById('wspace'); }
+function setWorkspaceEditorExtent(value, save) {
+  const fullscreen = isWorkspaceFullscreen();
+  const styles = getComputedStyle(wcols);
+  const gap = parseFloat(styles.rowGap) || 0;
+  if (fullscreen) {
+    const available = wcols.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+    const maxWidth = Math.max(240, available - wspaceResize.offsetWidth - gap - 220);
+    const width = Math.round(Math.max(240, Math.min(maxWidth, value)));
+    wcols.style.setProperty('--weditor-width', width + 'px');
+    wspaceResize.setAttribute('aria-valuenow', String(width));
+    if (save) {
+      try { localStorage.setItem('ccl-teacher-editor-width', String(width / Math.max(1, available))); } catch (e) {}
+    }
+  } else {
+    const available = wcols.clientHeight - parseFloat(styles.paddingTop) - parseFloat(styles.paddingBottom);
+    const maxHeight = Math.max(120, available - wspaceResize.offsetHeight - gap - 144);
+    const height = Math.round(Math.max(120, Math.min(maxHeight, value)));
+    wcols.style.setProperty('--weditor-height', height + 'px');
+    wspaceResize.setAttribute('aria-valuenow', String(height));
+    if (save) {
+      try { localStorage.setItem('ccl-teacher-editor-height', String(height)); } catch (e) {}
+    }
+  }
+  if (weditor) weditor.layout();
+}
+try {
+  const savedEditorHeight = Number(localStorage.getItem('ccl-teacher-editor-height'));
+  if (Number.isFinite(savedEditorHeight) && savedEditorHeight >= 120) setWorkspaceEditorExtent(savedEditorHeight, false);
+  const savedEditorWidth = Number(localStorage.getItem('ccl-teacher-editor-width'));
+  if (Number.isFinite(savedEditorWidth) && savedEditorWidth > 0 && isWorkspaceFullscreen()) {
+    setWorkspaceEditorExtent(wcols.clientWidth * savedEditorWidth, false);
+  }
+} catch (e) {}
+wspaceResize.addEventListener('pointerdown', (event) => {
+  event.preventDefault();
+  wspaceResize.setPointerCapture(event.pointerId);
+  wspaceResize.classList.add('is-resizing');
+  const fullscreen = isWorkspaceFullscreen();
+  const start = fullscreen ? event.clientX : event.clientY;
+  const startExtent = fullscreen ? weditorElement.getBoundingClientRect().width : weditorElement.getBoundingClientRect().height;
+  const resize = (moveEvent) => {
+    const position = fullscreen ? moveEvent.clientX : moveEvent.clientY;
+    setWorkspaceEditorExtent(startExtent + position - start, true);
+  };
+  const stop = () => {
+    wspaceResize.classList.remove('is-resizing');
+    wspaceResize.removeEventListener('pointermove', resize);
+    wspaceResize.removeEventListener('pointerup', stop);
+    wspaceResize.removeEventListener('pointercancel', stop);
+  };
+  wspaceResize.addEventListener('pointermove', resize);
+  wspaceResize.addEventListener('pointerup', stop);
+  wspaceResize.addEventListener('pointercancel', stop);
+});
+wspaceResize.addEventListener('keydown', (event) => {
+  const fullscreen = isWorkspaceFullscreen();
+  const decrease = fullscreen ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';
+  const increase = fullscreen ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
+  if (!decrease && !increase) return;
+  event.preventDefault();
+  const current = fullscreen ? weditorElement.getBoundingClientRect().width : weditorElement.getBoundingClientRect().height;
+  setWorkspaceEditorExtent(current + (increase ? 16 : -16), true);
+});
+window.addEventListener('resize', () => {
+  if (isWorkspaceFullscreen()) setWorkspaceEditorExtent(weditorElement.getBoundingClientRect().width, false);
+  else setWorkspaceEditorExtent(weditorElement.getBoundingClientRect().height, false);
+});
+document.getElementById('qClear').onclick = termReset;
+function runWorkspace() { document.getElementById('wrunBtn').click(); }
+document.getElementById('qRun').onclick = runWorkspace;
+document.getElementById('qFull').onclick = () => document.getElementById('wfullBtn').click();
+// ---- motor do terminal: REPL persistente + respostas a input() ----
+// instalador de helpers Python (_wcheck: bloco incompleto? _wrun: corre c/ eco)
+const WRUN_SRC = [
+  'def _wrun(src):',
+  '    import ast, traceback',
+  '    try:',
+  '        tree = ast.parse(src, mode="single")',
+  '    except SyntaxError as e:',
+  '        print("  File \\"<terminal>\\", line " + str(e.lineno or 1))',
+  '        print("    " + (e.text or "").strip())',
+  '        print(type(e).__name__ + ": " + e.msg)',
+  '        return',
+  '    if len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr):',
+  '        try:',
+  '            _v = eval(compile(ast.Expression(tree.body[0].value), "<terminal>", "eval"), globals())',
+  '        except SystemExit:',
+  '            return',
+  '        except BaseException:',
+  '            traceback.print_exc()',
+  '            return',
+  '        if _v is not None:',
+  '            print(repr(_v))',
+  '        return',
+  '    try:',
+  '        exec(compile(tree, "<terminal>", "single"), globals())',
+  '    except SystemExit:',
+  '        pass',
+  '    except BaseException:',
+  '        traceback.print_exc()',
+  ''
+].join('\n');
+let wbusy = false;
+let answerMode = null; // { prompts:[], answers:[], index }
+let replBuf = '';
+let cmdHist = [];
+let histIdx = -1;
+function setPs1(t) { document.getElementById('wps1').textContent = t; }
+async function ensurePyConsole() {
+  const py = await wgetPy();
+  if (!py.globals.get('_wrepl_ready')) {
+    py.runPython('import codeop\ndef _wcheck(src):\n    try:\n        return "ok" if codeop.compile_command(src, "<term>", "single") else "more"\n    except (SyntaxError, OverflowError, ValueError):\n        return "bad"\n' + WRUN_SRC);
+    py.globals.set('_wrepl_ready', true);
+  }
+  return py;
+}
+async function runFileWithAnswers(answers, sourceCode, fileName) {
+  const t0 = performance.now();
+  wbusy = true;
+  termPrint('$ python ' + fileName);
+  try {
+    const py = await ensurePyConsole();
+    const logs = [];
+    py.setStdout({ batched: (s) => logs.push(s) });
+    py.setStderr({ batched: (s) => logs.push('[erro] ' + s) });
+    let code = sourceCode;
+    if (answers) {
+      code = '_RESPOSTAS = ' + JSON.stringify(answers) + '\n' +
+        'def input(prompt=""):\n    _a = _RESPOSTAS.pop(0) if _RESPOSTAS else ""\n    print(str(prompt) + str(_a))\n    return _a\n' + code;
+    }
+    await py.runPythonAsync(code);
+    if (logs.length) logs.forEach((l) => termPrint(l));
+    else termPrint('(sem output)');
+    termPrint('[fim — ' + Math.round(performance.now() - t0) + 'ms]');
+    saveWorkspaceForRoom(roomInput.value);
+  } catch (err) { termPrint('⛔ ' + String((err && err.message) || err)); }
+  document.getElementById('wtime').textContent = Math.round(performance.now() - t0) + 'ms';
+  wbusy = false;
+  document.getElementById('wcmd').focus();
+}
+function answerNext(line) {
+  const cur = answerMode.prompts[answerMode.index];
+  termPrint(cur + line);
+  answerMode.answers.push(line);
+  answerMode.index++;
+  if (answerMode.index < answerMode.prompts.length) {
+    setPs1(answerMode.prompts[answerMode.index]);
+  } else {
+    const answers = answerMode.answers;
+    const sourceCode = answerMode.code;
+    const fileName = answerMode.fileName;
+    answerMode = null;
+    setPs1('>>> ');
+    runFileWithAnswers(answers, sourceCode, fileName);
+  }
+}
+async function replSubmit(line) {
+  const input = document.getElementById('wcmd');
+  input.value = '';
+  if (wbusy) return;
+  if (answerMode) { answerNext(line); return; }
+  termPrint('>>> ' + line);
+  if (!line.trim()) return;
+  if (line.trim() === 'clear' || line.trim() === 'cls') { termReset(); return; }
+  cmdHist.push(line);
+  histIdx = cmdHist.length;
+  wbusy = true;
+  try {
+    const py = await ensurePyConsole();
+    const logs = [];
+    py.setStdout({ batched: (s) => logs.push(s) });
+    py.setStderr({ batched: (s) => logs.push(s) });
+    replBuf += (replBuf ? '\n' : '') + line;
+    const st = py.globals.get('_wcheck')(replBuf);
+    if (st === 'more') { setPs1('... '); }
+    else {
+      setPs1('>>> ');
+      py.globals.get('_wrun')(replBuf);
+      if (logs.length) logs.forEach((l) => termPrint(l));
+      replBuf = '';
+    }
+  } catch (err) { termPrint('⛔ ' + String((err && err.message) || err)); replBuf = ''; setPs1('>>> '); }
+  wbusy = false;
+  input.focus();
+}
+document.getElementById('wcmd').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); replSubmit(document.getElementById('wcmd').value); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); if (cmdHist.length) { histIdx = Math.max(0, histIdx - 1); document.getElementById('wcmd').value = cmdHist[histIdx] || ''; } }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); if (cmdHist.length) { histIdx = Math.min(cmdHist.length, histIdx + 1); document.getElementById('wcmd').value = cmdHist[histIdx] || ''; } }
+  else if (e.key === 'Escape' && answerMode) { answerMode = null; setPs1('>>> '); termPrint('[cancelado]'); }
+});
+document.getElementById('wrunBtn').onclick = async () => {
+  if (!weditor || wbusy) return;
+  if (answerMode) { termPrint('[termina as respostas primeiro — Esc cancela]'); return; }
+  const code = weditor.getValue();
+  const activeFile = getActiveWorkspaceFile();
+  if (!activeFile) return;
+  activeFile.code = code;
+  saveWorkspaceForRoom(roomInput.value);
+  // input(): em vez de popups, pede os valores na linha de comandos
+  const prompts = [...code.matchAll(/input\s*\(\s*(?:(['"])(.*?)\1\s*)?\)/g)].map(m => m[2] || '');
+  if (prompts.length) {
+    answerMode = { prompts, answers: [], index: 0, code, fileName: activeFile.name };
+    setPs1(prompts[0]);
+    termPrint('$ python ' + activeFile.name);
+    termPrint('[o programa precisa de ' + prompts.length + ' valor(es) — escreve na linha abaixo]');
+    document.getElementById('wcmd').focus();
+    return;
+  }
+  runFileWithAnswers(null, code, activeFile.name);
+};
+document.getElementById('wnewBtn').onclick = createWorkspaceFile;
+document.getElementById('wmenuBtn').onclick = (e) => { e.stopPropagation(); document.getElementById('wmenu').classList.toggle('hidden'); };
+document.getElementById('wdlBtn').onclick = () => {
+  if (!weditor) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([weditor.getValue()], { type: 'text/plain;charset=utf-8' }));
+  a.download = getActiveWorkspaceFile().name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+document.getElementById('wcopyBtn').onclick = async () => {
+  if (!weditor) return;
+  try { await navigator.clipboard.writeText(weditor.getValue()); termPrint('[código copiado]'); } catch (e) { termPrint('[falha a copiar]'); }
+};
+// Ecrã inteiro no workspace (para projetar): fonte maior, Esc sai
+document.getElementById('wfullBtn').onclick = async () => {
+  const el = document.getElementById('wspace');
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await el.requestFullscreen();
+  } catch (e) {}
+};
+document.addEventListener('fullscreenchange', () => {
+  const on = !!document.fullscreenElement;
+  const workspaceFullscreen = isWorkspaceFullscreen();
+  wspaceResize.setAttribute('aria-orientation', workspaceFullscreen ? 'vertical' : 'horizontal');
+  wspaceResize.setAttribute('aria-label', workspaceFullscreen ? 'Redimensionar editor e painel de tarefas lado a lado' : 'Redimensionar editor e painel de tarefas');
+  if (workspaceFullscreen) {
+    try {
+      const savedWidth = Number(localStorage.getItem('ccl-teacher-editor-width'));
+      if (Number.isFinite(savedWidth) && savedWidth > 0) setWorkspaceEditorExtent(wcols.clientWidth * savedWidth, false);
+      else setWorkspaceEditorExtent(wcols.clientWidth * 0.6, false);
+    } catch (e) { setWorkspaceEditorExtent(wcols.clientWidth * 0.6, false); }
+  } else {
+    setWorkspaceEditorExtent(weditorElement.getBoundingClientRect().height, false);
+  }
+  if (weditor && window.monaco) { weditor.updateOptions({ fontSize: on ? 17 : 13 }); weditor.layout(); }
+});
 
 require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
 require(['vs/editor/editor.main'], function () {
   focusEditor = monaco.editor.create(document.getElementById('focusEditor'), {
     value: '// Seleciona um aluno para ver o código em direto...',
-    language: 'javascript', theme: 'vs-dark', readOnly: true,
+    language: 'python', theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: true,
     automaticLayout: true, fontSize: 13, minimap: { enabled: false }
   });
+  boardEditor = monaco.editor.create(document.getElementById('boardEditor'), {
+    value: '// Seleciona um aluno no board para ver o código em direto...',
+    language: 'python', theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: true,
+    automaticLayout: true, fontSize: 13, minimap: { enabled: false }
+  });
+  const initialWorkspace = loadWorkspaceForRoom(roomInput.value);
+  workspaceFiles = initialWorkspace.files;
+  activeWorkspaceFileId = initialWorkspace.activeFileId;
+  weditor = monaco.editor.create(document.getElementById('weditor'), {
+    value: getActiveWorkspaceFile().code,
+    language: 'python', theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark',
+    automaticLayout: true, fontSize: 13, minimap: { enabled: true }
+  });
+  renderWorkspaceFiles();
+  window._wroom = roomInput.value;
+  let wt;
+  weditor.onDidChangeModelContent(() => {
+    clearTimeout(wt);
+    wt = setTimeout(() => {
+      const activeFile = getActiveWorkspaceFile();
+      if (activeFile) activeFile.code = weditor.getValue();
+      saveWorkspaceForRoom(roomInput.value);
+    }, 800);
+  });
+  weditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runWorkspace);
   render();
 });
+// Sem servidor: inicializa a UI na mesma para programar/projetar offline
+if (!socket) {
+  try {
+    document.getElementById('roomSub').textContent = 'Servidor desligado — workspace local funciona na mesma.';
+    joinUI();
+  } catch (e) {}
+}
+// Repõe a última vista (por defeito: Início = dashboard completo)
+try {
+  const _t = localStorage.getItem('ccl-teacher-tab');
+  setTab(_t === 'terminal' ? 'tarefas' : (_t && ['inicio', 'alunos', 'projetor', 'tarefas'].includes(_t) ? _t : 'inicio'));
+} catch (e) { try { setTab('inicio'); } catch (e2) {} }
 </script>
 </body>
 </html>

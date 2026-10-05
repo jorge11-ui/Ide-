@@ -9,7 +9,34 @@
 <script>try { if ((localStorage.getItem('ccl-theme') || 'dark') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}</script>
 <style>
   html, body { height: 100%; }
-  #editor { flex: 1; min-height: 0; }
+  #editor { flex: 1 1 auto; min-height: 120px; }
+  #consolePanel { height: var(--console-height, 12rem); flex: 0 0 var(--console-height, 12rem); min-height: 120px; }
+  .resize-handle {
+    position: relative;
+    z-index: 2;
+    flex: 0 0 10px;
+    cursor: row-resize;
+    touch-action: none;
+    display: grid;
+    place-items: center;
+    color: #64748b;
+    background: transparent;
+  }
+  .resize-handle::after {
+    content: "";
+    width: 44px;
+    height: 3px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: .55;
+    transition: width .15s ease, opacity .15s ease, background-color .15s ease;
+  }
+  .resize-handle:hover::after, .resize-handle:focus-visible::after, .resize-handle.is-resizing::after {
+    width: 64px;
+    opacity: 1;
+    background: #8b5cf6;
+  }
+  .resize-handle:focus-visible { outline: 2px solid #8b5cf6; outline-offset: -2px; }
   #output { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
   /* Evita flash escuro para quem gravou o tema claro */
   html[data-theme="light"] body { background: #f8fafc; color: #0f172a; }
@@ -21,7 +48,11 @@
   body.light #toolbar { background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; }
   body.light #toolbar input, body.light #toolbar select { background-color: #ffffff !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
   body.light #toolbar .text-slate-500 { color: #64748b !important; }
+  body.light #studentTasksPanel { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
+  body.light .student-task-card { background-color: #f8fafc !important; border-color: #e2e8f0 !important; }
+  body.light .student-task-card .task-description { color: #475569 !important; }
   body.light #editor { border-top: 1px solid #e2e8f0; }
+  body.light .resize-handle { color: #94a3b8; }
   body.light #consolePanel { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
   body.light #consolePanel .font-semibold, body.light #consolePanel .text-slate-300 { color: #0f172a !important; }
   body.light #consolePanel .text-slate-500, body.light #consolePanel .text-slate-600 { color: #64748b !important; }
@@ -83,7 +114,19 @@
     </div>
     <input type="file" id="uploadInput" accept=".py,.txt" class="hidden" />
     <span id="runTime" class="text-xs text-slate-500 font-mono"></span>
+    <button id="studentTasksToggle" type="button" class="ml-auto rounded border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-sm font-medium text-violet-200 hover:bg-violet-500/20" aria-expanded="false" aria-controls="studentTasksPanel">Tarefas <span id="studentTaskCount" class="ml-1 rounded-full bg-violet-500/20 px-1.5 text-xs">0</span></button>
   </div>
+
+  <section id="studentTasksPanel" class="hidden max-h-[38vh] shrink-0 overflow-auto border-b border-slate-800 bg-slate-900 px-4 py-3" aria-label="Tarefas da turma">
+    <div class="mx-auto max-w-5xl">
+      <div class="mb-2 flex items-center gap-2">
+        <h2 class="text-sm font-semibold">Tarefas da turma</h2>
+        <span id="studentTaskStatus" role="status" aria-live="polite" class="ml-auto text-xs text-slate-500"></span>
+        <button id="studentTasksClose" type="button" class="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-800" aria-label="Fechar tarefas">Fechar</button>
+      </div>
+      <div id="studentTaskList" class="grid gap-2 md:grid-cols-2"></div>
+    </div>
+  </section>
 
   <!-- Aviso de turma congelada -->
   <div id="freezeBanner" class="hidden px-4 py-1.5 text-xs font-semibold text-center bg-red-600 text-white">Turma congelada pela professora — editor só de leitura</div>
@@ -91,8 +134,10 @@
   <!-- Editor -->
   <div id="editor"></div>
 
+  <div id="editorConsoleResize" class="resize-handle" role="separator" aria-orientation="horizontal" aria-label="Redimensionar editor e consola" aria-controls="editor consolePanel" aria-valuemin="120" aria-valuenow="192" tabindex="0" title="Arrasta para ajustar o espaço do editor e da consola"></div>
+
   <!-- Consola / Preview : execução 100% local = rápido -->
-  <section id="consolePanel" class="h-48 shrink-0 border-t border-slate-800 bg-slate-900 flex flex-col">
+  <section id="consolePanel" class="shrink-0 border-t border-slate-800 bg-slate-900 flex flex-col">
     <div class="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-slate-800">
       <span class="font-semibold text-slate-300">Consola</span>
       <span id="runLabel" class="text-slate-500 font-mono"></span>
@@ -107,6 +152,7 @@
     <span>Ln <span id="line">1</span>, Col <span id="col">1</span></span>
     <span id="chars">0 chars</span>
     <span id="savedLabel" title="O código é guardado automaticamente neste computador (por sala + linguagem)">Guardado: —</span>
+    <span id="regLabel" title="Registo do aluno: nome + ID persistente neste computador">Registo: —</span>
     <span class="ml-auto">Último envio: <span id="lastSend" class="font-mono">—</span></span>
   </footer>
 
@@ -141,6 +187,29 @@ settingsMenu.addEventListener('click', (e) => { if (e.target.closest('button')) 
 if (qs.get('room')) roomInput.value = qs.get('room');
 if (qs.get('name')) nameInput.value = qs.get('name');
 document.getElementById('roomLabel').textContent = roomInput.value;
+// ---- Registo do aluno: nome + ID persistente neste computador ----
+// O servidor identifica o aluno por este ID: reconnects juntam-se ao mesmo
+// registo e o código fica visível à professora mesmo com o aluno offline.
+function getStudentId() {
+  try {
+    let id = localStorage.getItem('ccl-student-id');
+    if (!id) {
+      id = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      localStorage.setItem('ccl-student-id', id);
+    }
+    return id;
+  } catch (e) { return 's-temp-' + Math.random().toString(36).slice(2, 8); }
+}
+const studentId = getStudentId();
+try {
+  const savedName = localStorage.getItem('ccl-student-name');
+  if (savedName && !qs.get('name')) nameInput.value = savedName;
+} catch (e) {}
+function refreshRegLabel() {
+  const el = document.getElementById('regLabel');
+  if (el) el.textContent = 'Registo: ' + (nameInput.value || 'Aluno') + ' (' + studentId.slice(0, 12) + '…)';
+}
+refreshRegLabel();
 
 const socket = io();
 const statusDot = document.getElementById('statusDot');
@@ -154,8 +223,15 @@ socket.on('connect', () => { setStatus('● ligado', true); join(false); });
 socket.on('disconnect', () => setStatus('● desligado', false));
 let lastRoom = roomInput.value;
 function join(manual) {
+  if (manual && roomInput.value !== lastRoom) {
+    studentTasks.clear();
+    renderStudentTasks();
+    document.getElementById('studentTaskStatus').textContent = '';
+  }
   document.getElementById('roomLabel').textContent = roomInput.value;
-  socket.emit('join_room', { roomId: roomInput.value, name: nameInput.value, role: 'student', language: langSelect.value });
+  try { localStorage.setItem('ccl-student-name', nameInput.value); } catch (e) {}
+  refreshRegLabel();
+  socket.emit('join_room', { roomId: roomInput.value, name: nameInput.value, role: 'student', language: langSelect.value, studentId });
   // Mudou de sala manualmente: carrega o código guardado dessa sala (ou modelo novo)
   if (manual && window._editor && roomInput.value !== lastRoom) {
     lastRoom = roomInput.value;
@@ -184,6 +260,152 @@ function applyFreeze(f) {
 }
 socket.on('freeze_state', ({ frozen: f }) => applyFreeze(f));
 
+const pendingTasks = [];
+const studentTasks = new Map();
+const submittingTasks = new Set();
+function renderStudentTasks() {
+  const list = document.getElementById('studentTaskList');
+  list.textContent = '';
+  const tasks = [...studentTasks.values()].sort((a, b) => b.createdAt - a.createdAt);
+  document.getElementById('studentTaskCount').textContent = String(tasks.length);
+  if (!tasks.length) {
+    const empty = document.createElement('p');
+    empty.className = 'rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-500 md:col-span-2';
+    empty.textContent = 'Ainda não há tarefas publicadas nesta sala.';
+    list.appendChild(empty);
+    return;
+  }
+  tasks.forEach(task => {
+    const card = document.createElement('article');
+    card.className = 'student-task-card rounded-lg border border-slate-800 bg-slate-950/40 p-3';
+    const heading = document.createElement('div');
+    heading.className = 'flex items-start gap-2';
+    const title = document.createElement('h3');
+    title.className = 'min-w-0 flex-1 text-sm font-semibold';
+    title.textContent = task.title;
+    const status = document.createElement('span');
+    status.className = task.mySubmission
+      ? 'shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400'
+      : 'shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300';
+    status.textContent = task.mySubmission ? 'Entregue' : 'Por entregar';
+    heading.append(title, status);
+    const description = document.createElement('p');
+    description.className = 'task-description mt-1 whitespace-pre-wrap break-words text-xs text-slate-400';
+    description.textContent = task.description;
+    const meta = document.createElement('p');
+    meta.className = 'mt-2 text-[10px] text-slate-500';
+    meta.textContent = task.mySubmission
+      ? 'Última entrega: ' + new Date(task.mySubmission.submittedAt).toLocaleString()
+      : 'Publicada: ' + new Date(task.createdAt).toLocaleString();
+    const submit = document.createElement('button');
+    submit.type = 'button';
+    submit.className = 'mt-3 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60';
+    submit.disabled = submittingTasks.has(task.id);
+    submit.textContent = submittingTasks.has(task.id) ? 'A enviar…' : (task.mySubmission ? 'Entregar novamente' : 'Entregar tarefa');
+    submit.setAttribute('aria-label', submit.textContent + ': ' + task.title);
+    submit.onclick = () => submitTask(task);
+    card.append(heading, description, meta, submit);
+    list.appendChild(card);
+  });
+}
+function receiveClassTasks(tasks) {
+  if (!Array.isArray(tasks)) return;
+  studentTasks.clear();
+  tasks.forEach(task => {
+    if (task && typeof task.id === 'string' && task.roomId === roomInput.value) {
+      studentTasks.set(task.id, task);
+      applyClassTask(task);
+    }
+  });
+  renderStudentTasks();
+}
+function receiveClassTask(task) {
+  if (!task || task.roomId !== roomInput.value) return;
+  const previous = studentTasks.get(task.id);
+  studentTasks.set(task.id, { ...task, mySubmission: previous ? previous.mySubmission : (task.mySubmission || null) });
+  applyClassTask(task);
+  renderStudentTasks();
+}
+function submitTask(task) {
+  if (!window._editor || !socket.connected || submittingTasks.has(task.id)) {
+    document.getElementById('studentTaskStatus').textContent = 'A ligação ou o editor ainda não estão prontos.';
+    return;
+  }
+  submittingTasks.add(task.id);
+  document.getElementById('studentTaskStatus').textContent = 'A enviar a entrega…';
+  renderStudentTasks();
+  socket.emit('submit_task', {
+    roomId: roomInput.value,
+    taskId: task.id,
+    code: window._editor.getValue(),
+    language: langSelect.value
+  });
+}
+document.getElementById('studentTasksToggle').onclick = () => {
+  const panel = document.getElementById('studentTasksPanel');
+  const open = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !open);
+  document.getElementById('studentTasksToggle').setAttribute('aria-expanded', String(open));
+};
+document.getElementById('studentTasksClose').onclick = () => {
+  document.getElementById('studentTasksPanel').classList.add('hidden');
+  document.getElementById('studentTasksToggle').setAttribute('aria-expanded', 'false');
+};
+renderStudentTasks();
+function applyClassTask(task) {
+  if (!task || task.roomId !== roomInput.value || !window._editor || !window.monaco) {
+    if (task && task.roomId === roomInput.value && (!window._editor || !window.monaco)) pendingTasks.push(task);
+    return;
+  }
+  if (langSelect.value !== 'python' || typeof task.id !== 'string' ||
+      typeof task.title !== 'string' || typeof task.description !== 'string') return;
+  const editor = window._editor;
+  const model = editor.getModel();
+  if (!model) return;
+  const marker = '# Tarefa ID: ' + task.id;
+  if (model.getValue().includes(marker)) return;
+  const description = task.description.replace(/\r\n?/g, '\n').split('\n').map(line => line ? '# ' + line : '#');
+  const commentBlock = [
+    marker,
+    '# Tarefa: ' + task.title,
+    ...description,
+    '# --- Fim da tarefa ---',
+    '',
+    ''
+  ].join('\n');
+  const selections = editor.getSelections() || [];
+  const cursorOffsets = selections.map(selection => ({
+    start: model.getOffsetAt(selection.getStartPosition()),
+    end: model.getOffsetAt(selection.getEndPosition())
+  }));
+  model.applyEdits([{
+    range: new monaco.Range(1, 1, 1, 1),
+    text: commentBlock,
+    forceMoveMarkers: true
+  }]);
+  if (cursorOffsets.length) {
+    editor.setSelections(cursorOffsets.map(offsets => {
+      const start = model.getPositionAt(offsets.start + commentBlock.length);
+      const end = model.getPositionAt(offsets.end + commentBlock.length);
+      return new monaco.Selection(start.lineNumber, start.column, end.lineNumber, end.column);
+    }));
+  }
+}
+socket.on('class_task', receiveClassTask);
+socket.on('class_tasks', receiveClassTasks);
+socket.on('submission_saved', ({ taskId, submission }) => {
+  const task = studentTasks.get(taskId);
+  if (task) task.mySubmission = submission;
+  submittingTasks.delete(taskId);
+  document.getElementById('studentTaskStatus').textContent = 'Entrega enviada com sucesso.';
+  renderStudentTasks();
+});
+socket.on('submission_error', ({ taskId, message }) => {
+  if (taskId) submittingTasks.delete(taskId);
+  document.getElementById('studentTaskStatus').textContent = message || 'Não foi possível enviar a entrega.';
+  renderStudentTasks();
+});
+
 // ---------- execução local e rápida ----------
 const output = document.getElementById('output');
 const preview = document.getElementById('preview');
@@ -197,6 +419,54 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 function showConsole(){ output.classList.remove('hidden'); preview.classList.add('hidden'); }
 function showPreview(){ output.classList.add('hidden'); preview.classList.remove('hidden'); }
 document.getElementById('clearBtn').onclick = () => { output.textContent = ''; showConsole(); runTime.textContent = ''; };
+
+// Resize area between the code editor and console.
+const editorConsoleResize = document.getElementById('editorConsoleResize');
+const consolePanel = document.getElementById('consolePanel');
+const consoleHeightKey = 'ccl-console-height';
+function setConsoleHeight(height, save) {
+  const editor = document.getElementById('editor');
+  const footer = document.querySelector('body > footer');
+  const minEditorHeight = 120;
+  const available = document.body.clientHeight - editor.offsetTop - footer.offsetHeight - editorConsoleResize.offsetHeight - minEditorHeight;
+  const maxHeight = Math.max(120, Math.min(window.innerHeight * 0.65, available));
+  const next = Math.round(Math.max(120, Math.min(maxHeight, height)));
+  document.documentElement.style.setProperty('--console-height', next + 'px');
+  editorConsoleResize.setAttribute('aria-valuenow', String(next));
+  if (save) {
+    try { localStorage.setItem(consoleHeightKey, String(next)); } catch (e) {}
+  }
+  if (window._editor) window._editor.layout();
+}
+try {
+  const savedConsoleHeight = Number(localStorage.getItem(consoleHeightKey));
+  if (Number.isFinite(savedConsoleHeight) && savedConsoleHeight >= 120) setConsoleHeight(savedConsoleHeight, false);
+} catch (e) {}
+editorConsoleResize.addEventListener('pointerdown', (event) => {
+  event.preventDefault();
+  editorConsoleResize.setPointerCapture(event.pointerId);
+  editorConsoleResize.classList.add('is-resizing');
+  const startY = event.clientY;
+  const startHeight = consolePanel.getBoundingClientRect().height;
+  const resize = (moveEvent) => setConsoleHeight(startHeight + startY - moveEvent.clientY, true);
+  const stop = () => {
+    editorConsoleResize.classList.remove('is-resizing');
+    editorConsoleResize.removeEventListener('pointermove', resize);
+    editorConsoleResize.removeEventListener('pointerup', stop);
+    editorConsoleResize.removeEventListener('pointercancel', stop);
+  };
+  editorConsoleResize.addEventListener('pointermove', resize);
+  editorConsoleResize.addEventListener('pointerup', stop);
+  editorConsoleResize.addEventListener('pointercancel', stop);
+});
+editorConsoleResize.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    const current = consolePanel.getBoundingClientRect().height;
+    setConsoleHeight(current + (event.key === 'ArrowUp' ? 16 : -16), true);
+  }
+});
+window.addEventListener('resize', () => setConsoleHeight(consolePanel.getBoundingClientRect().height, false));
 
 // Python via Pyodide, pré-carregado em fundo para o Run ser rápido
 let pyodidePromise = null;
@@ -300,6 +570,7 @@ require(['vs/editor/editor.main'], function () {
     language: langSelect.value, theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: window._frozen === true, automaticLayout: true, fontSize: 14, minimap: { enabled: false }
   });
   window._editor = editor;
+  pendingTasks.splice(0).forEach(applyClassTask);
   document.getElementById('chars').textContent = editor.getValue().length + ' chars';
   if ((loadSaved(roomInput.value, langSelect.value) ?? '') !== '') {
     const sl = document.getElementById('savedLabel');
