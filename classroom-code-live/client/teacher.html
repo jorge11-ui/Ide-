@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classroom Code Live — Professora</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body { height: 100%; }
+  #focusEditor { height: 320px; }
+  .mini-code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.45; white-space: pre; overflow: hidden; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex">
+
+  <!-- Sidebar -->
+  <aside class="w-64 shrink-0 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-4">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-violet-500 grid place-items-center font-bold text-slate-950">T</div>
+      <div>
+        <h1 class="font-semibold text-sm">Painel Professora</h1>
+        <p class="text-xs text-slate-400 font-mono" id="roomLabelSide">room_12A</p>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <input id="roomInput" value="room_12A" class="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm outline-none focus:border-violet-500 font-mono" />
+      <button id="joinBtn" class="bg-violet-600 hover:bg-violet-500 rounded-lg px-3 text-sm font-semibold">Entrar</button>
+    </div>
+    <div class="grid grid-cols-2 gap-2 text-center">
+      <div class="bg-slate-800 rounded-lg p-2"><p class="text-xl font-bold" id="statOnline">0</p><p class="text-[11px] text-slate-400">online</p></div>
+      <div class="bg-slate-800 rounded-lg p-2"><p class="text-xl font-bold" id="statChars">0</p><p class="text-[11px] text-slate-400">chars total</p></div>
+    </div>
+    <input id="search" placeholder="Pesquisar aluno..." class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-sm outline-none focus:border-violet-500" />
+    <p id="connLabel" class="text-xs text-red-300">● a ligar...</p>
+    <button id="snapshotBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2 text-sm">Pedir snapshot à turma</button>
+    <button class="mt-auto bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold">Congelar turma</button>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 flex flex-col min-w-0">
+    <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-800">
+      <h2 class="font-semibold">Alunos em direto</h2>
+      <span id="roomBadge" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">● sala aberta</span>
+      <span class="text-xs text-slate-500 ml-auto">Cartões leves + 1 Monaco de foco</span>
+    </header>
+    <div id="grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 p-4 overflow-auto"></div>
+    <section class="border-t border-slate-800 p-4 bg-slate-900/60">
+      <div class="flex items-center gap-2 mb-2">
+        <h3 class="font-semibold text-sm">Foco: <span id="focusName" class="text-violet-300">—</span></h3>
+        <span id="focusMeta" class="text-xs text-slate-400 font-mono"></span>
+      </div>
+      <div id="focusEditor" class="rounded-lg overflow-hidden border border-slate-800"></div>
+    </section>
+  </main>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+<script>
+const qs = new URLSearchParams(location.search);
+const roomInput = document.getElementById('roomInput');
+if (qs.get('room')) roomInput.value = qs.get('room');
+
+const socket = io();
+const students = new Map(); // socketId -> { name, language, code }
+let focusId = null;
+let focusEditor = null;
+
+const grid = document.getElementById('grid');
+const connLabel = document.getElementById('connLabel');
+socket.on('connect', () => { connLabel.textContent = '● ligada'; connLabel.className = 'text-xs text-emerald-300'; join(); });
+socket.on('disconnect', () => { connLabel.textContent = '● desligada'; connLabel.className = 'text-xs text-red-300'; });
+
+function join() {
+  const room = roomInput.value;
+  document.getElementById('roomLabelSide').textContent = room;
+  document.getElementById('roomBadge').textContent = '● ' + room;
+  socket.emit('join_room', { roomId: room, name: 'Professora', role: 'teacher' });
+  // pede estado atual a quem já estava a escrever (caso entre a meio)
+  socket.emit('request_snapshot', { roomId: room });
+}
+document.getElementById('joinBtn').onclick = join;
+document.getElementById('snapshotBtn').onclick = () => socket.emit('request_snapshot', { roomId: roomInput.value });
+
+// ---- eventos live ----
+socket.on('room_state', (list) => {
+  students.clear();
+  list.forEach(s => students.set(s.socketId, { name: s.name, language: s.language, code: s.code || '' }));
+  if (!focusId && list.length) focusId = list[0].socketId;
+  render();
+});
+socket.on('code_update', ({ socketId, name, code, language }) => {
+  students.set(socketId, { name, language, code });
+  if (!focusId) focusId = socketId;
+  render();
+});
+socket.on('student_left', ({ socketId }) => {
+  students.delete(socketId);
+  if (focusId === socketId) focusId = [...students.keys()][0] || null;
+  render();
+});
+
+function escapeHtml(t){ return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  grid.innerHTML = '';
+  let totalChars = 0;
+  [...students.entries()].forEach(([id, s]) => {
+    totalChars += (s.code || '').length;
+    if (!s.name.toLowerCase().includes(q)) return;
+    const card = document.createElement('button');
+    card.className = 'text-left rounded-xl overflow-hidden transition border ' + (id === focusId ? 'bg-slate-900 border-violet-500' : 'bg-slate-900 border-slate-800 hover:border-violet-500');
+    card.innerHTML =
+      '<div class="flex items-center gap-2 px-3 py-2 border-b border-slate-800">' +
+        '<span class="w-2 h-2 rounded-full bg-emerald-400"></span>' +
+        '<span class="text-sm font-medium">' + escapeHtml(s.name) + '</span>' +
+        '<span class="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">' + escapeHtml(s.language) + '</span>' +
+      '</div>' +
+      '<div class="mini-code p-3 h-28 text-slate-300">' + (escapeHtml((s.code || '').slice(0, 220)) || '<span class="text-slate-600">a aguardar código...</span>') + '</div>' +
+      '<div class="px-3 py-1.5 text-[11px] text-slate-500 border-t border-slate-800">' + (s.code || '').length + ' chars • live</div>';
+    card.onclick = () => { focusId = id; render(); };
+    grid.appendChild(card);
+  });
+  if (students.size === 0) grid.innerHTML = '<p class="text-sm text-slate-500 col-span-full">Nenhum aluno ligado. Alunos: abram <code class="font-mono">http://IP-DA-PROFESSORA:3000/?room=' + escapeHtml(roomInput.value) + '</code></p>';
+  document.getElementById('statOnline').textContent = students.size;
+  document.getElementById('statChars').textContent = totalChars;
+  // atualiza editor de foco
+  const f = students.get(focusId);
+  document.getElementById('focusName').textContent = f ? f.name : '—';
+  document.getElementById('focusMeta').textContent = f ? (f.language + ' • ' + f.code.length + ' chars') : '';
+  if (focusEditor && f) {
+    if (focusEditor.getValue() !== f.code) focusEditor.setValue(f.code);
+    monaco.editor.setModelLanguage(focusEditor.getModel(), f.language || 'javascript');
+  }
+}
+document.getElementById('search').oninput = render;
+
+require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+require(['vs/editor/editor.main'], function () {
+  focusEditor = monaco.editor.create(document.getElementById('focusEditor'), {
+    value: '// Seleciona um aluno para ver o código em direto...',
+    language: 'javascript', theme: 'vs-dark', readOnly: true,
+    automaticLayout: true, fontSize: 13, minimap: { enabled: false }
+  });
+  render();
+});
+</script>
+</body>
+</html>

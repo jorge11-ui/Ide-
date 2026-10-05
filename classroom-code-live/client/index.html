@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Classroom Code Live — Aluno</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+<script>try { if ((localStorage.getItem('ccl-theme') || 'dark') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}</script>
+<style>
+  html, body { height: 100%; }
+  #editor { flex: 1; min-height: 0; }
+  #output { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
+  /* Evita flash escuro para quem gravou o tema claro */
+  html[data-theme="light"] body { background: #f8fafc; color: #0f172a; }
+  /* Tema claro: overrides sobre as classes dark do Tailwind */
+  body.light { background-color: #f8fafc !important; color: #0f172a !important; }
+  body.light header { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
+  body.light header h1 { color: #0f172a !important; }
+  body.light header p, body.light header .text-slate-400 { color: #64748b !important; }
+  body.light #toolbar { background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; }
+  body.light #toolbar input, body.light #toolbar select { background-color: #ffffff !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+  body.light #toolbar .text-slate-500 { color: #64748b !important; }
+  body.light #editor { border-top: 1px solid #e2e8f0; }
+  body.light #consolePanel { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
+  body.light #consolePanel .font-semibold, body.light #consolePanel .text-slate-300 { color: #0f172a !important; }
+  body.light #consolePanel .text-slate-500, body.light #consolePanel .text-slate-600 { color: #64748b !important; }
+  body.light #output { color: #0f172a !important; }
+  body.light #output .text-red-400 { color: #dc2626 !important; }
+  body.light #output .text-slate-600 { color: #94a3b8 !important; }
+  body.light footer { background-color: #ffffff !important; border-color: #e2e8f0 !important; color: #64748b !important; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col h-screen">
+
+  <!-- Topbar -->
+  <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900">
+    <div class="w-8 h-8 rounded-lg bg-emerald-500 grid place-items-center font-bold text-slate-950">&lt;/&gt;</div>
+    <div class="flex-1">
+      <h1 class="font-semibold leading-tight">Classroom Code Live <span class="text-slate-400 font-normal">— Aluno</span></h1>
+      <p class="text-xs text-slate-400">Sala: <span id="roomLabel" class="text-emerald-400 font-mono">room_12A</span></p>
+    </div>
+    <span id="pyStatus" class="text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700" title="Pyodide carrega em fundo para o 1º Run ser rápido">py: a carregar...</span>
+    <span id="statusDot" class="text-xs px-2 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30">● a ligar...</span>
+  </header>
+
+  <!-- Toolbar -->
+  <div id="toolbar" class="flex flex-wrap items-center gap-2 px-4 py-2 bg-slate-900/60 border-b border-slate-800">
+    <input id="nameInput" value="Ana — PC 07" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm w-44 outline-none focus:border-emerald-500" />
+    <input id="roomInput" value="room_12A" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm w-32 outline-none focus:border-emerald-500 font-mono" title="Sala" />
+    <button id="joinBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1 text-sm">Entrar</button>
+    <select id="langSelect" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
+      <option value="javascript">JavaScript</option>
+      <option value="python">Python</option>
+      <option value="html">HTML</option>
+      <option value="css">CSS</option>
+    </select>
+    <select id="themeSelect" title="Tema da página e do editor" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
+      <option value="dark">Escuro</option>
+      <option value="light">Claro</option>
+    </select>
+    <button id="runBtn" class="bg-emerald-600 hover:bg-emerald-500 rounded px-4 py-1 text-sm font-bold">▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span></button>
+    <button id="clearBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-sm">Limpar</button>
+    <button id="dlBtn" title="Descarrega o código como ficheiro para o computador" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-sm">Descarregar</button>
+    <button id="newBtn" title="Limpar e começar do zero (apaga o guardado desta sala+linguagem)" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-sm">Novo</button>
+    <span id="runTime" class="text-xs text-slate-500 font-mono"></span>
+    <span class="text-xs text-slate-500 ml-auto">execução local • sem servidor</span>
+  </div>
+
+  <!-- Editor -->
+  <div id="editor"></div>
+
+  <!-- Consola / Preview : execução 100% local = rápido -->
+  <section id="consolePanel" class="h-48 shrink-0 border-t border-slate-800 bg-slate-900 flex flex-col">
+    <div class="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-slate-800">
+      <span class="font-semibold text-slate-300">Consola</span>
+      <span id="runLabel" class="text-slate-500 font-mono"></span>
+      <span class="ml-auto text-slate-600">JS = Worker + timeout 3s • Python = Pyodide • HTML = iframe</span>
+    </div>
+    <pre id="output" class="flex-1 overflow-auto px-4 py-2 text-slate-300">Prime <b>▶ Executar</b> para ver o resultado aqui.</pre>
+    <iframe id="preview" class="flex-1 w-full bg-white hidden" sandbox="allow-scripts" title="preview"></iframe>
+  </section>
+
+  <!-- Statusbar -->
+  <footer class="flex items-center gap-4 px-4 py-1.5 text-xs text-slate-400 border-t border-slate-800 bg-slate-900">
+    <span>Ln <span id="line">1</span>, Col <span id="col">1</span></span>
+    <span id="chars">0 chars</span>
+    <span id="savedLabel" title="O código é guardado automaticamente neste computador (por sala + linguagem)">Guardado: —</span>
+    <span class="ml-auto">Último envio: <span id="lastSend" class="font-mono">—</span></span>
+  </footer>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+<script>
+// ---------- socket (inalterado) ----------
+const qs = new URLSearchParams(location.search);
+const roomInput = document.getElementById('roomInput');
+const nameInput = document.getElementById('nameInput');
+const langSelect = document.getElementById('langSelect');
+const themeSelect = document.getElementById('themeSelect');
+// Tema gravado: aplica à página já antes do Monaco carregar
+function applyTheme(mode) {
+  const light = mode === 'light';
+  document.body.classList.toggle('light', light);
+  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+  themeSelect.value = light ? 'light' : 'dark';
+  try { localStorage.setItem('ccl-theme', light ? 'light' : 'dark'); } catch (e) {}
+  if (window._editor && window.monaco) monaco.editor.setTheme(light ? 'vs' : 'vs-dark');
+}
+let savedTheme = 'dark';
+try { savedTheme = localStorage.getItem('ccl-theme') || 'dark'; } catch (e) {}
+applyTheme(savedTheme === 'light' ? 'light' : 'dark');
+themeSelect.onchange = () => applyTheme(themeSelect.value);
+if (qs.get('room')) roomInput.value = qs.get('room');
+if (qs.get('name')) nameInput.value = qs.get('name');
+document.getElementById('roomLabel').textContent = roomInput.value;
+
+const socket = io();
+const statusDot = document.getElementById('statusDot');
+function setStatus(txt, ok) {
+  statusDot.textContent = txt;
+  statusDot.className = 'text-xs px-2 py-1 rounded-full border ' + (ok
+    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+    : 'bg-red-500/15 text-red-300 border-red-500/30');
+}
+socket.on('connect', () => { setStatus('● ligado', true); join(false); });
+socket.on('disconnect', () => setStatus('● desligado', false));
+let lastRoom = roomInput.value;
+function join(manual) {
+  document.getElementById('roomLabel').textContent = roomInput.value;
+  socket.emit('join_room', { roomId: roomInput.value, name: nameInput.value, role: 'student', language: langSelect.value });
+  // Mudou de sala manualmente: carrega o código guardado dessa sala (ou modelo novo)
+  if (manual && window._editor && roomInput.value !== lastRoom) {
+    lastRoom = roomInput.value;
+    const saved = loadSaved(roomInput.value, langSelect.value);
+    window._editor.setValue((saved !== null && saved !== undefined) ? saved : defaultTemplate(langSelect.value));
+  } else {
+    lastRoom = roomInput.value;
+  }
+  sendUpdate(true);
+}
+document.getElementById('joinBtn').onclick = () => join(true);
+nameInput.onchange = () => join(false);
+function sendUpdate() {
+  if (!window._editor) return;
+  const code = window._editor.getValue();
+  socket.emit('code_update', { roomId: roomInput.value, code, language: langSelect.value });
+  document.getElementById('lastSend').textContent = new Date().toLocaleTimeString() + ' (' + code.length + ' chars)';
+}
+
+// ---------- execução local e rápida ----------
+const output = document.getElementById('output');
+const preview = document.getElementById('preview');
+const runBtn = document.getElementById('runBtn');
+const runTime = document.getElementById('runTime');
+const runLabel = document.getElementById('runLabel');
+function print(lines, isErr) {
+  output.innerHTML = lines.length ? lines.map(l => isErr ? '<span class="text-red-400">' + esc(l) + '</span>' : esc(l)).join('\n') : '<span class="text-slate-600">(sem output — o programa correu sem console.log/print)</span>';
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function showConsole(){ output.classList.remove('hidden'); preview.classList.add('hidden'); }
+function showPreview(){ output.classList.add('hidden'); preview.classList.remove('hidden'); }
+document.getElementById('clearBtn').onclick = () => { output.textContent = ''; showConsole(); runTime.textContent = ''; };
+
+// JS em Web Worker: não congela o editor + mata loops infinitos aos 3s
+function runJS(code) {
+  return new Promise((resolve) => {
+    const wSrc = "onmessage=function(e){var logs=[];var console={log:function(){logs.push([].map.call(arguments,function(v){try{return typeof v==='object'?JSON.stringify(v):String(v)}catch(x){return String(v)}}).join(' '))},error:function(){logs.push('[erro] '+[].join.call(arguments,' '))},warn:function(){logs.push('[aviso] '+[].join.call(arguments,' '))}};try{var r=(new Function('console','\"use strict\";'+e.data))(console);if(r!==undefined)logs.push(String(r));postMessage({ok:true,logs:logs})}catch(err){postMessage({ok:false,logs:logs,error:String((err&&err.stack)||err)})}}";
+    const w = new Worker(URL.createObjectURL(new Blob([wSrc], { type: 'text/javascript' })));
+    const kill = setTimeout(() => { w.terminate(); resolve({ ok: false, logs: [], error: 'Timeout 3s — possível loop infinito. Worker terminado.' }); }, 3000);
+    w.onmessage = (ev) => { clearTimeout(kill); w.terminate(); resolve(ev.data); };
+    w.onerror = (err) => { clearTimeout(kill); w.terminate(); resolve({ ok: false, logs: [], error: String(err.message || err) }); };
+    w.postMessage(code);
+  });
+}
+
+// Python via Pyodide, pré-carregado em fundo para o Run ser rápido
+let pyodidePromise = null;
+function getPyodide() {
+  if (!pyodidePromise) pyodidePromise = loadPyodide();
+  return pyodidePromise;
+}
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    getPyodide().then(() => {
+      const el = document.getElementById('pyStatus');
+      el.textContent = 'py: pronto ✓'; el.className = 'text-xs px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+    }).catch(() => { document.getElementById('pyStatus').textContent = 'py: falhou (sem net?)'; });
+  }, 1500);
+});
+async function runPython(code) {
+  const py = await getPyodide();
+  const logs = [];
+  py.setStdout({ batched: (s) => logs.push(s) });
+  py.setStderr({ batched: (s) => logs.push('[erro] ' + s) });
+  let patched = code;
+  if (/input\s*\(/.test(code)) {
+    logs.push('[aviso] input() não suportado nesta versão rápida — a retornar "".');
+    patched = 'def input(prompt=""):\n    return ""\n' + code;
+  }
+  await py.runPythonAsync(patched);
+  return { ok: true, logs };
+}
+
+async function run() {
+  if (!window._editor) return;
+  const code = window._editor.getValue();
+  const lang = langSelect.value;
+  const t0 = performance.now();
+  runBtn.disabled = true; runBtn.textContent = '⏳ A correr...';
+  runLabel.textContent = lang + ' • ' + code.length + ' chars';
+  try {
+    if (lang === 'html' || lang === 'css') {
+      const doc = lang === 'css' ? '<style>' + code + '</style><p style="font-family:sans-serif;color:#666">CSS aplicado a esta página de teste ↑ (adiciona HTML no modo HTML para veres mais)</p>' : code;
+      preview.srcdoc = doc; showPreview();
+      runTime.textContent = 'render ' + Math.round(performance.now() - t0) + 'ms';
+    } else if (lang === 'python') {
+      showConsole(); output.textContent = 'A correr Python... (1ª vez pode demorar uns segundos a carregar o Pyodide)';
+      const r = await runPython(code);
+      print(r.logs, false);
+      runTime.textContent = Math.round(performance.now() - t0) + 'ms';
+    } else {
+      showConsole(); output.textContent = 'A correr...';
+      const r = await runJS(code);
+      print(r.ok ? r.logs : [...r.logs, '⛔ ' + r.error], !r.ok);
+      runTime.textContent = Math.round(performance.now() - t0) + 'ms';
+    }
+  } catch (e) {
+    showConsole(); print(['⛔ ' + (e && e.message || e)], true);
+  } finally {
+    runBtn.disabled = false; runBtn.innerHTML = '▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span>';
+  }
+}
+runBtn.onclick = run;
+window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); } });
+
+// ---------- guardar no computador (localStorage por sala+linguagem) ----------
+function codeKey(room, lang) { return 'ccl-code:' + room + ':' + lang; }
+function defaultTemplate(lang) {
+  if (lang === 'python') return '# Escreve aqui o teu código...\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
+  if (lang === 'html') return '<!DOCTYPE html>\n<html>\n<body>\n  <h1>Olá turma</h1>\n</body>\n</html>';
+  if (lang === 'css') return '/* Escreve aqui o teu CSS... */\nbody {\n  font-family: sans-serif;\n}';
+  return '// Escreve aqui o teu código...\nfunction soma(a, b) {\n  return a + b;\n}\n\nconsole.log(soma(2, 3));';
+}
+function loadSaved(room, lang) { try { return localStorage.getItem(codeKey(room, lang)); } catch (e) { return null; } }
+function saveLocal(room, lang, code) {
+  try { localStorage.setItem(codeKey(room, lang), code); } catch (e) { return; }
+  const el = document.getElementById('savedLabel');
+  if (el) el.textContent = 'Guardado: ' + new Date().toLocaleTimeString();
+}
+document.getElementById('dlBtn').onclick = () => {
+  if (!window._editor) return;
+  const ext = { javascript: 'js', python: 'py', html: 'html', css: 'css' }[langSelect.value] || 'txt';
+  const safe = (nameInput.value || 'aluno').replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([window._editor.getValue()], { type: 'text/plain;charset=utf-8' }));
+  a.download = safe + '.' + ext;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+document.getElementById('newBtn').onclick = () => {
+  if (!window._editor) return;
+  if (!confirm('Começar do zero? Substitui o código guardado desta sala + linguagem pelo modelo inicial.')) return;
+  window._editor.setValue(defaultTemplate(langSelect.value));
+  saveLocal(roomInput.value, langSelect.value, window._editor.getValue());
+  showConsole(); sendUpdate(true);
+};
+
+// ---------- monaco ----------
+require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+require(['vs/editor/editor.main'], function () {
+  const editor = monaco.editor.create(document.getElementById('editor'), {
+    value: (loadSaved(roomInput.value, langSelect.value) ?? defaultTemplate(langSelect.value)),
+    language: langSelect.value, theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', automaticLayout: true, fontSize: 14, minimap: { enabled: false }
+  });
+  window._editor = editor;
+  document.getElementById('chars').textContent = editor.getValue().length + ' chars';
+  if ((loadSaved(roomInput.value, langSelect.value) ?? '') !== '') {
+    const sl = document.getElementById('savedLabel');
+    if (sl) sl.textContent = 'Restaurado onde paraste ✓';
+  }
+  let prevLang = langSelect.value;
+  langSelect.onchange = () => {
+    try { localStorage.setItem(codeKey(roomInput.value, prevLang), editor.getValue()); } catch (e) {}
+    monaco.editor.setModelLanguage(editor.getModel(), langSelect.value);
+    const saved = loadSaved(roomInput.value, langSelect.value);
+    editor.setValue((saved !== null && saved !== undefined) ? saved : defaultTemplate(langSelect.value));
+    prevLang = langSelect.value;
+    showConsole(); sendUpdate(true);
+  };
+  editor.onDidChangeCursorPosition(e => {
+    document.getElementById('line').textContent = e.position.lineNumber;
+    document.getElementById('col').textContent = e.position.column;
+  });
+  let t;
+  editor.onDidChangeModelContent(() => {
+    const code = editor.getValue();
+    document.getElementById('chars').textContent = code.length + ' chars';
+    clearTimeout(t);
+    t = setTimeout(() => sendUpdate(false), 400);
+    // autosave local (debounce próprio para não escrever a cada tecla)
+    clearTimeout(window._saveT);
+    window._saveT = setTimeout(() => saveLocal(roomInput.value, langSelect.value, editor.getValue()), 800);
+  });
+  socket.on('request_state', () => sendUpdate(true));
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => run());
+});
+</script>
+</body>
+</html>
