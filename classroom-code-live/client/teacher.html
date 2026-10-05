@@ -522,6 +522,7 @@ let sessionStart = Date.now();
 let lastRoomT = roomInput.value;
 let unread = 0;
 let prevOnline = new Set();
+const helpNotifications = new Set();
 const AV_COLORS = ['#7c3aed', '#2563eb', '#059669', '#ea580c', '#db2777', '#0891b2'];
 function avColor(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
 function escapeHtml(t) { return String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -884,7 +885,12 @@ function joinUI() {
   }
   roomInput.value = room;
   persistTeacherRoom(room);
-  if (room !== lastRoomT) { sessionStart = Date.now(); prevOnline = new Set(); lastRoomT = room; }
+  if (room !== lastRoomT) {
+    sessionStart = Date.now();
+    prevOnline = new Set();
+    helpNotifications.clear();
+    lastRoomT = room;
+  }
   document.getElementById('sessRoom').textContent = room;
   document.getElementById('roomName').textContent = room;
   document.getElementById('infoRoom').textContent = room;
@@ -1074,6 +1080,16 @@ function saveRosterCache() {
   try { localStorage.setItem(rosterCacheKey(), JSON.stringify([...students.entries()])); } catch (e) {}
 }
 onSock('room_state', (list) => {
+  const activeHelpRequests = new Set(
+    list.filter(s => s.progressStatus === 'help').map(s => s.studentId)
+  );
+  list.filter(s => s.progressStatus === 'help').forEach(s => {
+    if (!helpNotifications.has(s.studentId)) {
+      logEvent((s.name || 'Um aluno') + ' pediu ajuda.');
+    }
+  });
+  helpNotifications.clear();
+  activeHelpRequests.forEach(studentId => helpNotifications.add(studentId));
   const nowOnline = new Set(list.filter(s => s.online !== false).map(s => s.studentId));
   list.filter(s => s.online !== false && !prevOnline.has(s.studentId)).forEach(s => logEvent(s.name + ' entrou na sala.'));
   [...prevOnline].filter(id => !nowOnline.has(id)).forEach(id => {
@@ -1112,6 +1128,12 @@ onSock('student_remove_error', ({ message } = {}) => {
 });
 onSock('code_update', ({ studentId, name, code, language, progressStatus, progressUpdatedAt, joinedAt, lastSeenAt }) => {
   const previous = students.get(studentId) || {};
+  if (progressStatus === 'help') {
+    if (!helpNotifications.has(studentId)) logEvent((name || 'Um aluno') + ' pediu ajuda.');
+    helpNotifications.add(studentId);
+  } else {
+    helpNotifications.delete(studentId);
+  }
   students.set(studentId, {
     ...previous, name, language, code, online: true, updatedAt: Date.now(),
     progressStatus: progressStatus || 'working', progressUpdatedAt: progressUpdatedAt || Date.now(),
