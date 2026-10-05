@@ -2,23 +2,14 @@
 
 ## Configurar o acesso da professora
 
-O painel em `/teacher` e `/teacher.html` exige uma palavra-passe configurada no servidor. Sem ela, o servidor não permite iniciar sessão nem concede o papel de professora aos sockets.
+Na primeira abertura de `/teacher`, a professora cria uma palavra-passe com pelo menos 12 caracteres. Essa primeira configuração é guardada como hash em `server/data/teacher-auth.json`; não é necessário editar ficheiros ou variáveis para começar. A sessão deste navegador persiste por um ano, ou até selecionar **Sair**. Os próximos acessos pedem a palavra-passe escolhida.
 
-Gera uma chave de sessão uma vez e guarda-a num gestor de segredos:
+Faz essa configuração inicial num computador da professora antes de partilhar a aplicação com a turma. Para alojamento com armazenamento temporário, define credenciais nas variáveis de ambiente do serviço ou configura um disco persistente, para manter o acesso após reinícios.
 
-```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Antes de iniciar o servidor, define a palavra-passe escolhida e a chave guardada:
+Opcionalmente, é possível substituir a autenticação local com as variáveis de ambiente `TEACHER_PASSWORD` e `TEACHER_SESSION_SECRET`. Também podes guardar essas variáveis num `server/.env` local, que não é incluído no Git:
 
 ```powershell
-$env:TEACHER_PASSWORD = "escolhe-uma-palavra-passe-forte"
-$env:TEACHER_SESSION_SECRET = "cola-aqui-a-chave-gerada"
-Set-Location server
-npm start
+Copy-Item server\.env.example server\.env
 ```
-
-Guarda estes valores num gestor de segredos ou nas variáveis de ambiente do serviço de alojamento; não os coloques no código nem num commit. Se `TEACHER_SESSION_SECRET` não estiver definida, é gerada uma chave temporária ao arrancar o servidor e as sessões existentes deixam de ser válidas após um reinício. As sessões autenticadas expiram após oito horas.
 
 Usa HTTPS se o servidor for acessível fora de uma rede local de confiança, para proteger a palavra-passe durante o envio.

@@ -3,21 +3,43 @@ const http = require('http');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const fs = require('fs');
 const { Server } = require('socket.io');
 const QRCode = require('qrcode');
+
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' }, maxHttpBufferSize: 30 * 1024 * 1024 });
 
 const CLIENT_DIR = path.join(__dirname, '../client');
+const DATA_DIR = path.join(__dirname, 'data');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const TEACHER_AUTH_FILE = path.join(DATA_DIR, 'teacher-auth.json');
 const TEACHER_PASSWORD = process.env.TEACHER_PASSWORD || '';
-const TEACHER_SESSION_SECRET = process.env.TEACHER_SESSION_SECRET || crypto.randomBytes(32).toString('hex');
-const TEACHER_SESSION_MS = 8 * 60 * 60 * 1000;
+const ENV_SESSION_SECRET = process.env.TEACHER_SESSION_SECRET || '';
+const TEACHER_SESSION_MS = 365 * 24 * 60 * 60 * 1000;
 const TEACHER_COOKIE = 'ccl_teacher_session';
 
+function readTeacherCredentials() {
+  if (!fs.existsSync(TEACHER_AUTH_FILE)) return null;
+  const credentials = JSON.parse(fs.readFileSync(TEACHER_AUTH_FILE, 'utf8'));
+  if (!credentials || credentials.version !== 1 ||
+      typeof credentials.salt !== 'string' || typeof credentials.passwordHash !== 'string' ||
+      typeof credentials.sessionSecret !== 'string') {
+    throw new Error('O ficheiro de autenticação da professora está inválido.');
+  }
+  return credentials;
+}
+
+let teacherCredentials = readTeacherCredentials();
+let teacherSessionSecret = ENV_SESSION_SECRET ||
+  (teacherCredentials && teacherCredentials.sessionSecret) ||
+  crypto.randomBytes(32).toString('hex');
+
 function signTeacherSession(payload) {
-  return crypto.createHmac('sha256', TEACHER_SESSION_SECRET).update(payload).digest('base64url');
+  return crypto.createHmac('sha256', teacherSessionSecret).update(payload).digest('base64url');
 }
 
 function isValidTeacherSession(cookieHeader) {
@@ -40,16 +62,12 @@ function isValidTeacherSession(cookieHeader) {
 }
 
 app.use(express.json({ limit: '2kb' }));
-app.post('/teacher-auth', (req, res) => {
-  if (!TEACHER_PASSWORD) {
-    return res.status(503).json({ message: 'A palavra-passe da professora ainda não foi configurada no servidor.' });
-  }
-  const suppliedPassword = req.body && typeof req.body.password === 'string' ? req.body.password : '';
-  const suppliedHash = crypto.createHash('sha256').update(suppliedPassword).digest();
-  const expectedHash = crypto.createHash('sha256').update(TEACHER_PASSWORD).digest();
-  if (!crypto.timingSafeEqual(suppliedHash, expectedHash)) {
-    return res.status(401).json({ message: 'Palavra-passe incorreta.' });
-  }
+app.get('/teacher-auth-status', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ setupRequired: !TEACHER_PASSWORD && !teacherCredentials });
+});
+
+function issueTeacherSession(req, res) {
   const expiresAt = Date.now() + TEACHER_SESSION_MS;
   const payload = Buffer.from(JSON.stringify({ expiresAt })).toString('base64url');
   const token = `${payload}.${signTeacherSession(payload)}`;
@@ -61,9 +79,73 @@ app.post('/teacher-auth', (req, res) => {
     maxAge: TEACHER_SESSION_MS
   });
   res.json({ ok: true });
+}
+
+app.post('/teacher-auth', (req, res) => {
+  const suppliedPassword = req.body && typeof req.body.password === 'string' ? req.body.password : '';
+  if (TEACHER_PASSWORD) {
+    const suppliedHash = crypto.createHash('sha256').update(suppliedPassword).digest();
+    const expectedHash = crypto.createHash('sha256').update(TEACHER_PASSWORD).digest();
+    if (!crypto.timingSafeEqual(suppliedHash, expectedHash)) {
+      return res.status(401).json({ message: 'Palavra-passe incorreta.' });
+    }
+    return issueTeacherSession(req, res);
+  }
+
+  if (!teacherCredentials) {
+    if (suppliedPassword.length < 12) {
+      return res.status(400).json({ message: 'Cria uma palavra-passe com pelo menos 12 caracteres.' });
+    }
+    const credentials = {
+      version: 1,
+      salt: crypto.randomBytes(16).toString('base64'),
+      passwordHash: '',
+      sessionSecret: crypto.randomBytes(32).toString('hex')
+    };
+    credentials.passwordHash = crypto.scryptSync(suppliedPassword, credentials.salt, 64).toString('base64');
+    let fileDescriptor;
+    try {
+      fileDescriptor = fs.openSync(TEACHER_AUTH_FILE, 'wx', 0o600);
+      fs.writeFileSync(fileDescriptor, JSON.stringify(credentials));
+      fs.closeSync(fileDescriptor);
+      fileDescriptor = undefined;
+    } catch (error) {
+      if (fileDescriptor !== undefined) fs.closeSync(fileDescriptor);
+      if (error.code === 'EEXIST') {
+        teacherCredentials = readTeacherCredentials();
+        if (!ENV_SESSION_SECRET && teacherCredentials) {
+          teacherSessionSecret = teacherCredentials.sessionSecret;
+        }
+        return res.status(409).json({ message: 'O acesso da professora já foi configurado. Inicia sessão com a palavra-passe definida.' });
+      }
+      console.error('Não foi possível guardar o acesso da professora:', error.message);
+      return res.status(500).json({ message: 'Não foi possível guardar a configuração no servidor.' });
+    }
+    teacherCredentials = credentials;
+    if (!ENV_SESSION_SECRET) teacherSessionSecret = credentials.sessionSecret;
+    return issueTeacherSession(req, res);
+  }
+
+  const suppliedHash = crypto.scryptSync(suppliedPassword, teacherCredentials.salt, 64);
+  const expectedHash = Buffer.from(teacherCredentials.passwordHash, 'base64');
+  if (suppliedHash.length !== expectedHash.length || !crypto.timingSafeEqual(suppliedHash, expectedHash)) {
+    return res.status(401).json({ message: 'Palavra-passe incorreta.' });
+  }
+  issueTeacherSession(req, res);
+});
+
+app.post('/teacher-logout', (req, res) => {
+  res.clearCookie(TEACHER_COOKIE, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: req.secure,
+    path: '/'
+  });
+  res.json({ ok: true });
 });
 
 app.get(['/teacher', '/teacher.html'], (req, res) => {
+  res.set('Cache-Control', 'no-store');
   if (!isValidTeacherSession(req.headers.cookie)) {
     return res.sendFile(path.join(CLIENT_DIR, 'teacher-login.html'));
   }
@@ -112,9 +194,6 @@ function roomState(roomId) {
 // ---- persistência em disco: roster + último código sobrevivem a refresh/disconnect.
 // NOTA: no Render (disco efémero) sobrevive a disconnects mas perde-se em restarts/redeploys;
 // a página da professora guarda ainda uma cópia em cache no browser como reserva.
-const fs = require('fs');
-const DATA_DIR = path.join(__dirname, 'data');
-try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 const dirty = new Set();
 function dataFile(roomId) { return path.join(DATA_DIR, String(roomId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) + '.json'); }
 function markDirty(roomId) { dirty.add(roomId); }
@@ -572,7 +651,7 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  Classroom Code Live a correr:`);
-  if (!TEACHER_PASSWORD) console.warn('  - Painel da professora bloqueado: define TEACHER_PASSWORD antes de iniciar.');
+  if (!TEACHER_PASSWORD && !teacherCredentials) console.log('  - Primeira visita a /teacher: a primeira professora configura o acesso.');
   console.log(`  - Professora (neste PC): http://localhost:${PORT}/teacher.html?room=room_12A`);
   console.log(`  - Alunos (mesma rede):  http://<IP-DESTE-PC>:${PORT}/?room=room_12A`);
   const nets = os.networkInterfaces();

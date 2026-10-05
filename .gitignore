@@ -1,3 +1,4 @@
 node_modules/
+classroom-code-live/server/.env
 # snapshots dos alunos (contêm código; gerados em runtime)
 classroom-code-live/server/data/

@@ -22,13 +22,13 @@
 </head>
 <body>
   <main>
-    <h1>Acesso da professora</h1>
-    <p>Introduz a palavra-passe configurada no servidor para abrir o painel da turma.</p>
+    <h1 id="heading">Acesso da professora</h1>
+    <p id="description">A verificar a configuração do servidor…</p>
     <form id="teacherLogin">
-      <label for="password">Palavra-passe</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <label id="passwordLabel" for="password">Palavra-passe</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus disabled>
       <p id="message" role="status" aria-live="polite"></p>
-      <button type="submit">Entrar no painel</button>
+      <button type="submit" disabled>Entrar no painel</button>
     </form>
   </main>
   <script>
@@ -36,10 +36,28 @@
     const password = document.getElementById('password');
     const message = document.getElementById('message');
     const button = form.querySelector('button');
+    let setupRequired = false;
+    fetch('/teacher-auth-status', { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) throw new Error('status');
+        const status = await response.json();
+        setupRequired = status.setupRequired === true;
+        if (setupRequired) {
+          document.getElementById('heading').textContent = 'Configurar acesso da professora';
+          document.getElementById('description').textContent = 'És a primeira pessoa a configurar este painel. Cria uma palavra-passe com pelo menos 12 caracteres. O acesso fica guardado neste servidor.';
+          document.getElementById('passwordLabel').textContent = 'Criar palavra-passe';
+          password.autocomplete = 'new-password';
+          password.minLength = 12;
+          button.textContent = 'Configurar e entrar';
+        }
+        password.disabled = false;
+        button.disabled = false;
+      })
+      .catch(() => { message.textContent = 'Não foi possível verificar a configuração do servidor.'; });
     form.addEventListener('submit', async event => {
       event.preventDefault();
       button.disabled = true;
-      message.textContent = 'A verificar…';
+      message.textContent = setupRequired ? 'A guardar a configuração…' : 'A verificar…';
       try {
         const response = await fetch('/teacher-auth', {
           method: 'POST',
@@ -49,6 +67,7 @@
         const result = await response.json();
         if (!response.ok) {
           message.textContent = result.message || 'Não foi possível iniciar sessão.';
+          if (response.status === 409) location.reload();
           return;
         }
         location.reload();
@@ -56,7 +75,6 @@
         message.textContent = 'Não foi possível contactar o servidor.';
       } finally {
         button.disabled = false;
-        password.value = '';
       }
     });
   </script>
