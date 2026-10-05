@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Acesso da professora — Classroom Code Live</title>
+  <style>
+    :root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #020617; color: #e2e8f0; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 1rem; }
+    main { width: min(100%, 26rem); padding: 2rem; border: 1px solid #334155; border-radius: 1rem; background: #0f172a; box-shadow: 0 24px 80px #0008; }
+    h1 { margin: 0 0 .5rem; font-size: 1.5rem; }
+    p { color: #94a3b8; line-height: 1.5; }
+    label { display: block; margin: 1.5rem 0 .5rem; font-size: .9rem; font-weight: 600; }
+    input, button { width: 100%; border-radius: .6rem; font: inherit; }
+    input { padding: .75rem; border: 1px solid #475569; background: #020617; color: #f8fafc; }
+    button { margin-top: 1rem; padding: .75rem; border: 0; background: #7c3aed; color: white; font-weight: 700; cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .65; }
+    #message { min-height: 1.5rem; margin: .75rem 0 0; color: #fbbf24; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Acesso da professora</h1>
+    <p>Introduz a palavra-passe configurada no servidor para abrir o painel da turma.</p>
+    <form id="teacherLogin">
+      <label for="password">Palavra-passe</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <p id="message" role="status" aria-live="polite"></p>
+      <button type="submit">Entrar no painel</button>
+    </form>
+  </main>
+  <script>
+    const form = document.getElementById('teacherLogin');
+    const password = document.getElementById('password');
+    const message = document.getElementById('message');
+    const button = form.querySelector('button');
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      button.disabled = true;
+      message.textContent = 'A verificar…';
+      try {
+        const response = await fetch('/teacher-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: password.value })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          message.textContent = result.message || 'Não foi possível iniciar sessão.';
+          return;
+        }
+        location.reload();
+      } catch (error) {
+        message.textContent = 'Não foi possível contactar o servidor.';
+      } finally {
+        button.disabled = false;
+        password.value = '';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -70,10 +70,53 @@
   body.light .menu-item { color: #0f172a; }
   body.light .menu-item:hover { background-color: #f1f5f9; }
   body.light .menu-label { color: #64748b; }
+  #loginView {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, .12), transparent 48%),
+      #020617;
+  }
+  .login-card { box-shadow: 0 24px 80px rgba(0, 0, 0, .35); }
+  body.light #loginView {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, .12), transparent 48%),
+      #f1f5f9;
+  }
+  body.light .login-card { background: #fff !important; border-color: #e2e8f0 !important; }
+  body.light .login-card label { color: #334155 !important; }
+  body.light .login-card .login-subtitle { color: #64748b !important; }
+  body.light .login-card input { background: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+  body.light #studentProgressBtn { color: #334155 !important; border-color: #cbd5e1 !important; }
 </style>
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-screen">
 
+  <main id="loginView" class="flex min-h-screen flex-1 items-center justify-center overflow-auto px-4 py-8">
+    <section class="login-card w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/95 p-6 sm:p-8">
+      <div class="mb-6 flex items-center gap-3">
+        <div class="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500 text-lg font-bold text-slate-950">&lt;/&gt;</div>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[.14em] text-emerald-400">Classroom Code Live</p>
+          <h1 class="mt-1 text-xl font-bold">Entrar na turma</h1>
+        </div>
+      </div>
+      <p class="login-subtitle mb-6 text-sm leading-relaxed text-slate-400">Regista o teu nome e o código da turma para começares a programar.</p>
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label for="loginName" class="mb-1.5 block text-sm font-medium text-slate-300">O teu nome</label>
+          <input id="loginName" name="name" required maxlength="40" autocomplete="name" placeholder="Ex.: Ana Silva" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20" />
+        </div>
+        <div>
+          <label for="loginRoom" class="mb-1.5 block text-sm font-medium text-slate-300">Código da turma</label>
+          <input id="loginRoom" name="room" required maxlength="60" autocomplete="off" placeholder="Ex.: room_12A" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 font-mono text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20" />
+        </div>
+        <p id="loginFeedback" class="min-h-5 text-xs text-amber-300" role="status" aria-live="polite"></p>
+        <button type="submit" class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400">Entrar e começar</button>
+      </form>
+      <p class="login-subtitle mt-5 text-center text-xs text-slate-500">O teu código será associado a este nome e a esta turma.</p>
+    </section>
+  </main>
+
+  <div id="appShell" class="hidden min-h-0 flex-1 flex-col">
   <!-- Topbar -->
   <header class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900">
     <div class="w-8 h-8 rounded-lg bg-emerald-500 grid place-items-center font-bold text-slate-950">&lt;/&gt;</div>
@@ -87,7 +130,7 @@
 
   <!-- Toolbar -->
   <div id="toolbar" class="flex flex-wrap items-center gap-2 px-4 py-2 bg-slate-900/60 border-b border-slate-800">
-    <input id="nameInput" value="Ana — PC 07" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm w-44 outline-none focus:border-emerald-500" />
+    <input id="nameInput" value="" aria-label="Nome do aluno" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm w-44 outline-none focus:border-emerald-500" />
     <select id="langSelect" title="Linguagem" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
       <option value="python">Python</option>
     </select>
@@ -114,6 +157,7 @@
     </div>
     <input type="file" id="uploadInput" accept=".py,.txt" class="hidden" />
     <span id="runTime" class="text-xs text-slate-500 font-mono"></span>
+    <button id="studentProgressBtn" type="button" class="rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800" aria-pressed="false">Preciso de ajuda</button>
     <button id="studentTasksToggle" type="button" class="ml-auto rounded border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-sm font-medium text-violet-200 hover:bg-violet-500/20" aria-expanded="false" aria-controls="studentTasksPanel">Tarefas <span id="studentTaskCount" class="ml-1 rounded-full bg-violet-500/20 px-1.5 text-xs">0</span></button>
   </div>
 
@@ -155,6 +199,7 @@
     <span id="regLabel" title="Registo do aluno: nome + ID persistente neste computador">Registo: —</span>
     <span class="ml-auto">Último envio: <span id="lastSend" class="font-mono">—</span></span>
   </footer>
+  </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -165,6 +210,8 @@ const roomInput = document.getElementById('roomInput');
 const nameInput = document.getElementById('nameInput');
 const langSelect = document.getElementById('langSelect');
 const themeSelect = document.getElementById('themeSelect');
+const loginNameInput = document.getElementById('loginName');
+const loginRoomInput = document.getElementById('loginRoom');
 // Tema gravado: aplica à página já antes do Monaco carregar
 function applyTheme(mode) {
   const light = mode === 'light';
@@ -184,7 +231,10 @@ document.getElementById('settingsBtn').onclick = (e) => { e.stopPropagation(); s
 document.addEventListener('click', (e) => { if (!settingsMenu.classList.contains('hidden') && !settingsMenu.contains(e.target)) settingsMenu.classList.add('hidden'); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') settingsMenu.classList.add('hidden'); });
 settingsMenu.addEventListener('click', (e) => { if (e.target.closest('button')) settingsMenu.classList.add('hidden'); });
-if (qs.get('room')) roomInput.value = qs.get('room');
+let savedRoom = '';
+let savedName = '';
+try { savedRoom = localStorage.getItem('ccl-student-room') || ''; } catch (e) {}
+roomInput.value = qs.get('room') || savedRoom || roomInput.value;
 if (qs.get('name')) nameInput.value = qs.get('name');
 document.getElementById('roomLabel').textContent = roomInput.value;
 // ---- Registo do aluno: nome + ID persistente neste computador ----
@@ -202,9 +252,15 @@ function getStudentId() {
 }
 const studentId = getStudentId();
 try {
-  const savedName = localStorage.getItem('ccl-student-name');
+  savedName = localStorage.getItem('ccl-student-name') || '';
   if (savedName && !qs.get('name')) nameInput.value = savedName;
 } catch (e) {}
+const shouldRestoreStudentSession = Boolean(
+  savedName.trim() && savedRoom.trim() && roomInput.value === savedRoom &&
+  (!qs.get('name') || qs.get('name') === savedName)
+);
+loginNameInput.value = nameInput.value;
+loginRoomInput.value = roomInput.value;
 function refreshRegLabel() {
   const el = document.getElementById('regLabel');
   if (el) el.textContent = 'Registo: ' + (nameInput.value || 'Aluno') + ' (' + studentId.slice(0, 12) + '…)';
@@ -212,6 +268,7 @@ function refreshRegLabel() {
 refreshRegLabel();
 
 const socket = io();
+let isRegistered = shouldRestoreStudentSession;
 const statusDot = document.getElementById('statusDot');
 function setStatus(txt, ok) {
   statusDot.textContent = txt;
@@ -219,8 +276,15 @@ function setStatus(txt, ok) {
     ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
     : 'bg-red-500/15 text-red-300 border-red-500/30');
 }
-socket.on('connect', () => { setStatus('● ligado', true); join(false); });
-socket.on('disconnect', () => setStatus('● desligado', false));
+socket.on('connect', () => {
+  setStatus('● ligado', true);
+  if (isRegistered) join(false);
+  else document.getElementById('loginFeedback').textContent = 'Ligação pronta. Preenche os teus dados para entrar.';
+});
+socket.on('disconnect', () => {
+  setStatus('● desligado', false);
+  if (!isRegistered) document.getElementById('loginFeedback').textContent = 'Sem ligação ao servidor. Podes entrar e continuar a programar neste dispositivo.';
+});
 let lastRoom = roomInput.value;
 function join(manual) {
   if (manual && roomInput.value !== lastRoom) {
@@ -230,6 +294,7 @@ function join(manual) {
   }
   document.getElementById('roomLabel').textContent = roomInput.value;
   try { localStorage.setItem('ccl-student-name', nameInput.value); } catch (e) {}
+  try { localStorage.setItem('ccl-student-room', roomInput.value); } catch (e) {}
   refreshRegLabel();
   socket.emit('join_room', { roomId: roomInput.value, name: nameInput.value, role: 'student', language: langSelect.value, studentId });
   // Mudou de sala manualmente: carrega o código guardado dessa sala (ou modelo novo)
@@ -244,10 +309,37 @@ function join(manual) {
 }
 document.getElementById('joinBtn').onclick = () => join(true);
 nameInput.onchange = () => join(false);
+function enterClass(name, room) {
+  nameInput.value = name;
+  roomInput.value = room;
+  loginNameInput.value = name;
+  loginRoomInput.value = room;
+  isRegistered = true;
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appShell').classList.remove('hidden');
+  document.getElementById('appShell').classList.add('flex');
+  document.getElementById('loginFeedback').textContent = '';
+  join(true);
+  setTimeout(() => { if (window._editor) window._editor.layout(); }, 80);
+}
+document.getElementById('loginForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const name = loginNameInput.value.trim();
+  const room = loginRoomInput.value.trim();
+  if (!name || !room) {
+    document.getElementById('loginFeedback').textContent = 'Preenche o teu nome e o código da turma.';
+    return;
+  }
+  enterClass(name, room);
+});
+if (shouldRestoreStudentSession) enterClass(nameInput.value.trim(), roomInput.value.trim());
 function sendUpdate() {
   if (!window._editor) return;
   const code = window._editor.getValue();
-  socket.emit('code_update', { roomId: roomInput.value, code, language: langSelect.value });
+  socket.emit('code_update', {
+    roomId: roomInput.value, code, language: langSelect.value,
+    progressStatus: studentProgressStatus
+  });
   document.getElementById('lastSend').textContent = new Date().toLocaleTimeString() + ' (' + code.length + ' chars)';
 }
 // Congelar: a professora bloqueia a escrita (readOnly) via freeze_state
@@ -285,18 +377,29 @@ function renderStudentTasks() {
     title.textContent = task.title;
     const status = document.createElement('span');
     status.className = task.mySubmission
-      ? 'shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400'
+      ? (task.mySubmission.late
+        ? 'shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300'
+        : 'shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400')
       : 'shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300';
-    status.textContent = task.mySubmission ? 'Entregue' : 'Por entregar';
+    status.textContent = task.mySubmission ? (task.mySubmission.late ? 'Entregue com atraso' : 'Entregue') :
+      (task.deadlineAt && Date.now() > task.deadlineAt ? 'Prazo ultrapassado' : 'Por entregar');
     heading.append(title, status);
     const description = document.createElement('p');
     description.className = 'task-description mt-1 whitespace-pre-wrap break-words text-xs text-slate-400';
     description.textContent = task.description;
     const meta = document.createElement('p');
     meta.className = 'mt-2 text-[10px] text-slate-500';
-    meta.textContent = task.mySubmission
+    meta.textContent = (task.mySubmission
       ? 'Última entrega: ' + new Date(task.mySubmission.submittedAt).toLocaleString()
-      : 'Publicada: ' + new Date(task.createdAt).toLocaleString();
+      : 'Publicada: ' + new Date(task.createdAt).toLocaleString()) +
+      (task.deadlineAt ? ' • Prazo: ' + new Date(task.deadlineAt).toLocaleString() : '');
+    const feedback = task.mySubmission && task.mySubmission.feedback;
+    let feedbackElement = null;
+    if (feedback) {
+      feedbackElement = document.createElement('p');
+      feedbackElement.className = 'mt-2 whitespace-pre-wrap rounded-md border border-violet-500/20 bg-violet-500/5 p-2 text-xs text-violet-200';
+      feedbackElement.textContent = 'Feedback da professora: ' + feedback;
+    }
     const submit = document.createElement('button');
     submit.type = 'button';
     submit.className = 'mt-3 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60';
@@ -304,7 +407,9 @@ function renderStudentTasks() {
     submit.textContent = submittingTasks.has(task.id) ? 'A enviar…' : (task.mySubmission ? 'Entregar novamente' : 'Entregar tarefa');
     submit.setAttribute('aria-label', submit.textContent + ': ' + task.title);
     submit.onclick = () => submitTask(task);
-    card.append(heading, description, meta, submit);
+    card.append(heading, description, meta);
+    if (feedbackElement) card.appendChild(feedbackElement);
+    card.appendChild(submit);
     list.appendChild(card);
   });
 }
@@ -326,6 +431,25 @@ function receiveClassTask(task) {
   applyClassTask(task);
   renderStudentTasks();
 }
+let studentProgressStatus = 'not_started';
+function renderStudentProgress() {
+  const button = document.getElementById('studentProgressBtn');
+  const needsHelp = studentProgressStatus === 'help';
+  button.textContent = needsHelp ? 'A pedir ajuda ✓' : 'Preciso de ajuda';
+  button.setAttribute('aria-pressed', String(needsHelp));
+  button.classList.toggle('border-amber-500/50', needsHelp);
+  button.classList.toggle('text-amber-300', needsHelp);
+}
+document.getElementById('studentProgressBtn').onclick = () => {
+  studentProgressStatus = studentProgressStatus === 'help' ? 'working' : 'help';
+  renderStudentProgress();
+  socket.emit('student_progress', { roomId: roomInput.value, status: studentProgressStatus });
+};
+socket.on('student_progress_state', ({ status } = {}) => {
+  studentProgressStatus = ['working', 'help'].includes(status) ? status : 'not_started';
+  renderStudentProgress();
+});
+renderStudentProgress();
 function submitTask(task) {
   if (!window._editor || !socket.connected || submittingTasks.has(task.id)) {
     document.getElementById('studentTaskStatus').textContent = 'A ligação ou o editor ainda não estão prontos.';
@@ -403,6 +527,14 @@ socket.on('submission_saved', ({ taskId, submission }) => {
 socket.on('submission_error', ({ taskId, message }) => {
   if (taskId) submittingTasks.delete(taskId);
   document.getElementById('studentTaskStatus').textContent = message || 'Não foi possível enviar a entrega.';
+  renderStudentTasks();
+});
+socket.on('submission_feedback', ({ taskId, submissionId, feedback, feedbackAt }) => {
+  const task = studentTasks.get(taskId);
+  if (!task || !task.mySubmission || task.mySubmission.id !== submissionId) return;
+  task.mySubmission.feedback = feedback;
+  task.mySubmission.feedbackAt = feedbackAt;
+  document.getElementById('studentTaskStatus').textContent = 'Recebeste feedback da professora.';
   renderStudentTasks();
 });
 
@@ -594,7 +726,13 @@ require(['vs/editor/editor.main'], function () {
     const code = editor.getValue();
     document.getElementById('chars').textContent = code.length + ' chars';
     clearTimeout(t);
-    t = setTimeout(() => sendUpdate(false), 400);
+    t = setTimeout(() => {
+      if (isRegistered && studentProgressStatus !== 'help') {
+        studentProgressStatus = 'working';
+        renderStudentProgress();
+      }
+      sendUpdate(false);
+    }, 400);
     // autosave local (debounce próprio para não escrever a cada tecla)
     clearTimeout(window._saveT);
     window._saveT = setTimeout(() => saveLocal(roomInput.value, langSelect.value, editor.getValue()), 800);

@@ -30,6 +30,14 @@
   .task-card { border: 1px solid rgba(148, 163, 184, .14); border-radius: .75rem; background: rgba(2, 6, 23, .18); }
   .submission-card { border: 1px solid rgba(148, 163, 184, .14); border-radius: .6rem; background: rgba(2, 6, 23, .2); }
   .submission-code { max-height: 24rem; overflow: auto; white-space: pre; border-radius: .5rem; background: #020617; padding: .75rem; color: #d1fae5; font: 12px/1.5 ui-monospace, Consolas, monospace; }
+  .presentation-mode #colLeft, .presentation-mode #colRight, .presentation-mode #viewAlunos { display: none !important; }
+  .presentation-mode #mainViews #colCenter { display: flex !important; }
+  .presentation-mode #tasksView .task-submissions, .presentation-mode #tasksView .task-composer { display: none !important; }
+  .presentation-mode #tasksView .task-presentation { max-width: 56rem; margin-inline: auto; }
+  .presentation-mode #tasksView > div { display: block; }
+  .presentation-mode #tasksView { padding-top: 2rem; }
+  .presentation-mode #topbar .teacher-tools > .relative { display: none; }
+  body.light .submission-card textarea { background: #fff !important; color: #0f172a !important; }
   .workspace-resize {
     position: relative;
     z-index: 2;
@@ -70,6 +78,7 @@
   body.light .text-slate-400 { color: #64748b !important; }
   body.light .text-slate-300, body.light .text-slate-200 { color: #334155 !important; }
   body.light input, body.light select { background-color: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
+  body.light textarea { background-color: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
   body.light .rowitem:hover { background-color: #f1f5f9 !important; }
   body.light .rowitem.active { background-color: rgba(139,92,246,.14) !important; }
   body.light hr { border-color: #e2e8f0 !important; }
@@ -94,6 +103,7 @@
   .navtab { flex: 0 0 auto; padding: 7px 13px; font-weight: 500; border: 0; border-radius: 8px; }
   .navtab.active { color: #fff; border: 0; border-radius: 8px; background: linear-gradient(135deg, rgba(139, 92, 246, .95), rgba(99, 102, 241, .88)); box-shadow: 0 2px 8px rgba(109, 40, 217, .24); }
   .teacher-tools { margin-left: auto; padding-left: 1rem; border-left: 1px solid rgba(148, 163, 184, .14); }
+  .teacher-tools > button { white-space: nowrap; }
   .connection-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border: 1px solid rgba(148, 163, 184, .12); border-radius: 999px; background: rgba(2, 6, 23, .24); color: #94a3b8; font-size: 11px; white-space: nowrap; }
   .teacher-avatar { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 8px rgba(124, 58, 237, .2); }
   #wfileTabs { min-width: 0; scrollbar-width: thin; scrollbar-color: #475569 transparent; }
@@ -204,6 +214,8 @@
     #topbar { height: auto; min-height: 4rem; flex-wrap: wrap; gap: .5rem; padding: .6rem .75rem .55rem; }
     .teacher-brand { flex: 1 1 auto; }
     .teacher-tools { margin-left: auto; padding-left: .5rem; border-left: 0; }
+    .teacher-tools { flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+    .teacher-tools > button { padding: .3rem .45rem; font-size: 10px; }
     .teacher-nav { order: 3; flex: 1 0 100%; margin-left: 0; justify-content: flex-start; }
     .navtab { padding: 7px 11px; font-size: 12px; }
     .connection-status { padding: 6px; }
@@ -236,6 +248,11 @@
       <button class="navtab" data-tab="tarefas">Tarefas</button>
     </nav>
     <div class="teacher-tools flex items-center gap-2">
+      <button id="inviteToolbarBtn" type="button" class="rounded-lg border border-slate-700 px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800" title="Partilhar link e QR code">Convidar</button>
+      <button id="presentationBtn" type="button" class="rounded-lg border border-slate-700 px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800" title="Projetar sem mostrar dados pessoais">Apresentar</button>
+      <button id="backupBtn" type="button" class="rounded-lg border border-slate-700 px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800">Backup</button>
+      <button id="restoreBackupBtn" type="button" class="rounded-lg border border-slate-700 px-2 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800">Importar</button>
+      <input id="backupInput" type="file" accept="application/json,.json" class="hidden" />
       <span class="connection-status" role="status" aria-live="polite" title="Estado da ligação ao servidor">
         <span id="connDot" class="w-2 h-2 rounded-full bg-red-500" aria-hidden="true"></span>
         <span id="connLabel" class="connection-label">A ligar</span>
@@ -273,7 +290,7 @@
         <p class="text-sm font-semibold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span id="sessRoom">room_12A</span></p>
         <p id="sessCount" class="text-xs text-slate-500 mt-0.5">0 alunos conectados</p>
       </div>
-      <button id="inviteBtn" class="bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold">+ Novo aluno</button>
+      <button id="inviteBtn" class="bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-sm font-semibold">+ Convidar alunos</button>
       <div class="relative">
         <button id="settingsBtn" class="w-full text-left text-sm text-slate-400 hover:text-slate-200 px-1 py-1">⚙ Definições</button>
         <div id="settingsMenu" class="hidden absolute bottom-full left-0 mb-1 w-64 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3 z-50 space-y-2">
@@ -418,7 +435,7 @@
 
   <section id="tasksView" class="hidden flex-1 min-h-0 min-w-0 overflow-auto p-4 lg:p-6" aria-labelledby="tasksHeading">
     <div class="mx-auto grid w-full max-w-6xl content-start gap-4 xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
-      <div class="card h-fit rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div class="task-composer card h-fit rounded-xl border border-slate-800 bg-slate-900 p-4">
         <div class="mb-4 flex items-center gap-3">
           <div class="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/15 text-lg text-violet-300" aria-hidden="true">✎</div>
           <div class="min-w-0">
@@ -431,16 +448,40 @@
           <input id="taskTitle" maxlength="120" required placeholder="Ex.: Função para calcular médias" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500" />
           <label for="taskDescription" class="text-xs font-medium text-slate-400">Instruções</label>
           <textarea id="taskDescription" maxlength="2000" required rows="5" placeholder="Descreve o que os alunos devem fazer..." class="w-full resize-y rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500"></textarea>
+          <label for="taskDeadline" class="text-xs font-medium text-slate-400">Prazo (opcional)</label>
+          <input id="taskDeadline" type="datetime-local" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500" />
           <p class="text-xs text-slate-500">O enunciado será incluído como comentário Python (#) no editor, sem substituir o código do aluno.</p>
           <p id="taskFeedback" role="status" aria-live="polite" class="min-h-4 text-xs text-slate-400"></p>
           <button id="taskPublishBtn" type="submit" class="rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">Publicar tarefa</button>
         </form>
       </div>
-      <div id="taskList" class="min-w-0 space-y-3" aria-live="polite">
+      <div class="task-presentation min-w-0 space-y-3" aria-live="polite">
+        <button id="exportSubmissionsBtn" type="button" class="mb-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700">Descarregar entregas (.zip)</button>
+        <div id="taskList" class="min-w-0 space-y-3" aria-live="polite">
         <p class="card rounded-xl border border-slate-800 bg-slate-900 p-6 text-center text-sm text-slate-500">Ainda não há tarefas publicadas nesta sala.</p>
+        </div>
       </div>
     </div>
   </section>
+
+  <div id="inviteModal" class="hidden fixed inset-0 z-[100] items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="inviteHeading">
+    <section class="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+      <div class="flex items-center gap-3">
+        <div class="min-w-0 flex-1">
+          <h2 id="inviteHeading" class="font-semibold">Convidar alunos</h2>
+          <p class="text-xs text-slate-400">Link e QR code para entrar na sala <span id="inviteRoomLabel" class="font-mono"></span></p>
+        </div>
+        <button id="inviteClose" type="button" class="rounded px-2 py-1 text-slate-400 hover:bg-slate-800" aria-label="Fechar">✕</button>
+      </div>
+      <div class="mt-4 flex justify-center rounded-xl bg-white p-3"><img id="inviteQr" class="h-56 w-56" alt="QR code de convite para a turma" /></div>
+      <label for="inviteLink" class="mt-4 block text-xs font-medium text-slate-400">Link da turma</label>
+      <div class="mt-1 flex gap-2">
+        <input id="inviteLink" readonly class="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-mono" />
+        <button id="inviteCopy" type="button" class="rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold hover:bg-violet-500">Copiar</button>
+      </div>
+      <p id="inviteFeedback" role="status" class="mt-2 min-h-4 text-xs text-slate-400"></p>
+    </section>
+  </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
@@ -571,6 +612,7 @@ function setConnectionStatus(connected, label) {
 onSock('connect', () => { setConnectionStatus(true, 'Ligada'); join(); });
 onSock('disconnect', () => setConnectionStatus(false, 'Sem ligação'));
 onSock('connect_error', () => setConnectionStatus(false, 'Indisponível'));
+onSock('teacher_auth_required', () => location.reload());
 if (!socket) setConnectionStatus(false, 'Indisponível');
 
 let taskHistory = [];
@@ -627,9 +669,10 @@ function renderTaskHistory() {
     description.textContent = task.description;
     const when = document.createElement('p');
     when.className = 'mt-2 text-[10px] text-slate-500';
-    when.textContent = 'Publicada em ' + new Date(task.createdAt).toLocaleString();
+    when.textContent = 'Publicada em ' + new Date(task.createdAt).toLocaleString() +
+      (task.deadlineAt ? ' • Prazo: ' + new Date(task.deadlineAt).toLocaleString() : '');
     const deliveryList = document.createElement('div');
-    deliveryList.className = 'mt-3 space-y-2';
+    deliveryList.className = 'task-submissions mt-3 space-y-2';
     const sectionTitle = document.createElement('h5');
     sectionTitle.className = 'text-xs font-semibold text-slate-300';
     sectionTitle.textContent = 'Entregas dos alunos';
@@ -654,8 +697,10 @@ function renderTaskHistory() {
         ? 'text-emerald-400'
         : (person.online ? 'text-amber-300' : 'text-slate-500');
       deliveryState.textContent = attempts.length
-        ? 'Entregue • ' + new Date(attempts[attempts.length - 1].submittedAt).toLocaleString()
-        : (person.online ? 'Por entregar • online' : 'Por entregar • offline');
+        ? 'Entregue' + (attempts[attempts.length - 1].late ? ' com atraso' : '') +
+          ' • ' + new Date(attempts[attempts.length - 1].submittedAt).toLocaleString()
+        : ((task.deadlineAt && Date.now() > task.deadlineAt) ? 'Atrasada' : 'Por entregar') +
+          (person.online ? ' • online' : ' • offline');
       summary.append(studentName, deliveryState);
       row.appendChild(summary);
       attempts.slice().reverse().forEach((submission, index) => {
@@ -665,11 +710,45 @@ function renderTaskHistory() {
         meta.className = 'mb-1 text-[10px] text-slate-500';
         meta.textContent = (attempts.length > 1 ? 'Entrega ' + (attempts.length - index) + ' • ' : '') +
           new Date(submission.submittedAt).toLocaleString() + ' • ' + submission.language +
-          ' • ' + submission.code.length + ' caracteres';
+          ' • ' + submission.code.length + ' caracteres' + (submission.late ? ' • ATRASADA' : '');
         const code = document.createElement('pre');
         code.className = 'submission-code';
         code.textContent = submission.code;
-        attempt.append(meta, code);
+        const feedback = document.createElement('p');
+        feedback.className = 'mb-2 whitespace-pre-wrap rounded bg-violet-500/5 p-2 text-xs text-violet-200';
+        if (submission.feedback) {
+          feedback.textContent = 'Feedback: ' + submission.feedback +
+            (submission.feedbackAt ? ' • ' + new Date(submission.feedbackAt).toLocaleString() : '');
+          attempt.appendChild(feedback);
+        }
+        if (index === 0) {
+        const feedbackForm = document.createElement('form');
+        feedbackForm.className = 'mt-2 flex flex-col gap-2 sm:flex-row';
+        const feedbackInput = document.createElement('textarea');
+        feedbackInput.maxLength = 2000;
+        feedbackInput.required = true;
+        feedbackInput.rows = 2;
+        feedbackInput.value = submission.feedback || '';
+        feedbackInput.placeholder = 'Escreve feedback para este código…';
+        feedbackInput.className = 'min-w-0 flex-1 resize-y rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs';
+        const feedbackButton = document.createElement('button');
+        feedbackButton.type = 'submit';
+        feedbackButton.className = 'self-start rounded bg-violet-600 px-3 py-2 text-xs font-semibold hover:bg-violet-500';
+        feedbackButton.textContent = 'Enviar feedback';
+        feedbackForm.append(feedbackInput, feedbackButton);
+        feedbackForm.onsubmit = event => {
+          event.preventDefault();
+          emitSock('task_feedback', {
+            roomId: roomInput.value, taskId: task.id,
+            submissionId: submission.id, feedback: feedbackInput.value.trim()
+          });
+          feedbackButton.disabled = true;
+          feedbackButton.textContent = 'A enviar…';
+        };
+          attempt.appendChild(feedbackForm);
+        }
+        attempt.prepend(meta);
+        attempt.appendChild(code);
         row.appendChild(attempt);
       });
       deliveryList.appendChild(row);
@@ -689,7 +768,8 @@ function updateHomeTaskSummary() {
   }
   const latest = taskHistory[0];
   const deliveries = new Set((latest.submissions || []).map(submission => submission.studentId)).size;
-  summary.textContent = 'Mais recente: ' + latest.title + ' — ' + deliveries + ' de ' + students.size + ' aluno(s) entregaram.';
+  summary.textContent = 'Mais recente: ' + latest.title + ' — ' + deliveries + ' de ' + students.size + ' aluno(s) entregaram.' +
+    (latest.deadlineAt ? ' Prazo: ' + new Date(latest.deadlineAt).toLocaleString() + '.' : '');
 }
 function saveTaskHistory() {
   try { localStorage.setItem(taskHistoryKey(taskHistoryRoom), JSON.stringify(taskHistory)); } catch (error) {}
@@ -729,16 +809,28 @@ function handleTaskSubmission({ taskId, submission } = {}) {
   const task = taskHistory.find(entry => entry.id === taskId);
   if (!task || !submission || typeof submission.id !== 'string') return;
   if (!Array.isArray(task.submissions)) task.submissions = [];
-  if (task.submissions.some(entry => entry.id === submission.id)) return;
-  task.submissions.push(submission);
+  const previous = task.submissions.findIndex(entry => entry.id === submission.id);
+  if (previous >= 0) task.submissions[previous] = { ...task.submissions[previous], ...submission };
+  else task.submissions.push(submission);
   renderTaskHistory();
   saveTaskHistory();
-  logEvent('Entrega recebida de ' + (submission.studentName || 'aluno') + '.');
+  if (previous < 0) logEvent('Entrega recebida de ' + (submission.studentName || 'aluno') + '.');
+}
+function handleFeedbackSaved({ taskId, submission } = {}) {
+  const task = taskHistory.find(entry => entry.id === taskId);
+  if (!task || !submission) return;
+  const index = task.submissions.findIndex(entry => entry.id === submission.id);
+  if (index >= 0) task.submissions[index] = { ...task.submissions[index], ...submission };
+  renderTaskHistory();
+  saveTaskHistory();
+  logEvent('Feedback enviado a ' + (submission.studentName || 'aluno') + '.');
 }
 document.getElementById('taskForm').addEventListener('submit', (event) => {
   event.preventDefault();
   const title = document.getElementById('taskTitle').value.trim();
   const description = document.getElementById('taskDescription').value.trim();
+  const deadlineValue = document.getElementById('taskDeadline').value;
+  const deadlineAt = deadlineValue ? new Date(deadlineValue).getTime() : null;
   if (!title || !description) {
     document.getElementById('taskFeedback').textContent = 'Preenche o título e as instruções da tarefa.';
     return;
@@ -751,11 +843,17 @@ document.getElementById('taskForm').addEventListener('submit', (event) => {
   button.disabled = true;
   button.textContent = 'A publicar…';
   document.getElementById('taskFeedback').textContent = 'A enviar para a sala ' + roomInput.value + '…';
-  socket.emit('publish_task', { roomId: roomInput.value, title, description });
+  socket.emit('publish_task', { roomId: roomInput.value, title, description, deadlineAt });
 });
 onSock('teacher_task', handlePublishedTask);
 onSock('class_tasks', handleClassTasks);
 onSock('task_submission', handleTaskSubmission);
+onSock('feedback_saved', handleFeedbackSaved);
+onSock('feedback_error', ({ submissionId, message } = {}) => {
+  const buttons = [...document.querySelectorAll('#taskList button[type="submit"]')];
+  buttons.forEach(button => { button.disabled = false; button.textContent = 'Enviar feedback'; });
+  if (message) logEvent(message);
+});
 onSock('task_error', ({ message } = {}) => {
   document.getElementById('taskPublishBtn').disabled = false;
   document.getElementById('taskPublishBtn').textContent = 'Publicar tarefa';
@@ -803,18 +901,128 @@ document.getElementById('roomEditBtn').onclick = () => {
   const r = prompt('Mudar de sala:', roomInput.value);
   if (r && r.trim()) { roomInput.value = r.trim(); join(); }
 };
-document.getElementById('inviteBtn').onclick = async () => {
-  const link = location.origin + '/?room=' + encodeURIComponent(roomInput.value);
-  try { await navigator.clipboard.writeText(link); } catch (e) {
-    const ta = document.createElement('textarea'); ta.value = link; document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } catch (e2) {}
-    ta.remove();
-  }
-  const b = document.getElementById('inviteBtn');
-  const old = b.textContent;
-  b.textContent = 'Link copiado ✓';
-  setTimeout(() => { b.textContent = old; }, 2000);
+function openInviteModal() {
+  const room = roomInput.value.trim();
+  const invite = location.origin + '/?room=' + encodeURIComponent(room);
+  document.getElementById('inviteRoomLabel').textContent = room;
+  document.getElementById('inviteLink').value = invite;
+  document.getElementById('inviteQr').src = '/invite-qr.png?room=' + encodeURIComponent(room) + '&v=' + Date.now();
+  document.getElementById('inviteFeedback').textContent = '';
+  const modal = document.getElementById('inviteModal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+function closeInviteModal() {
+  const modal = document.getElementById('inviteModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+document.getElementById('inviteBtn').onclick = openInviteModal;
+document.getElementById('inviteToolbarBtn').onclick = openInviteModal;
+document.getElementById('inviteClose').onclick = closeInviteModal;
+document.getElementById('inviteModal').addEventListener('click', event => {
+  if (event.target.id === 'inviteModal') closeInviteModal();
+});
+document.getElementById('inviteQr').onerror = () => {
+  document.getElementById('inviteFeedback').textContent = 'Não foi possível gerar o QR. Verifica se o servidor está ligado.';
 };
+document.getElementById('inviteCopy').onclick = async () => {
+  const input = document.getElementById('inviteLink');
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch (error) {
+    input.select();
+    if (!document.execCommand('copy')) {
+      document.getElementById('inviteFeedback').textContent = 'Copia o link selecionado manualmente.';
+      return;
+    }
+  }
+  document.getElementById('inviteFeedback').textContent = 'Link copiado.';
+};
+document.getElementById('presentationBtn').onclick = () => {
+  const enabled = !document.body.classList.contains('presentation-mode');
+  document.body.classList.toggle('presentation-mode', enabled);
+  document.getElementById('presentationBtn').textContent = enabled ? 'Sair da apresentação' : 'Apresentar';
+  if (enabled) setTab('projetor');
+  if (weditor) setTimeout(() => weditor.layout(), 80);
+};
+function downloadJson(data, fileName) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+}
+document.getElementById('backupBtn').onclick = () => {
+  if (!socket || !socket.connected) {
+    logEvent('Sem ligação ao servidor — não foi possível pedir o backup.');
+    return;
+  }
+  emitSock('request_backup', { roomId: roomInput.value });
+};
+onSock('backup_data', backup => {
+  if (!backup || backup.roomId !== roomInput.value) return;
+  const safeRoom = roomInput.value.replace(/[^a-zA-Z0-9_-]/g, '_');
+  downloadJson(backup, `backup-${safeRoom}-${new Date().toISOString().slice(0, 10)}.json`);
+  logEvent('Backup da turma descarregado.');
+});
+document.getElementById('restoreBackupBtn').onclick = () => document.getElementById('backupInput').click();
+document.getElementById('backupInput').onchange = event => {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  if (file.size > 25 * 1024 * 1024) {
+    logEvent('O backup é demasiado grande (máximo 25 MB).');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => logEvent('Não foi possível ler o ficheiro de backup.');
+  reader.onload = () => {
+    let backup;
+    try { backup = JSON.parse(String(reader.result || '')); }
+    catch (error) { logEvent('O ficheiro selecionado não contém JSON válido.'); return; }
+    if (!backup || backup.version !== 1 || backup.roomId !== roomInput.value) {
+      logEvent('Este backup não corresponde à turma atual (' + roomInput.value + ').');
+      return;
+    }
+    if (!confirm('Importar este backup vai substituir os alunos, códigos e tarefas guardados desta turma. Continuar?')) return;
+    emitSock('restore_backup', backup);
+  };
+  reader.readAsText(file);
+};
+onSock('backup_restored', ({ roomId, students: studentCount, tasks: taskCount } = {}) => {
+  if (roomId !== roomInput.value) return;
+  logEvent('Backup restaurado: ' + studentCount + ' aluno(s), ' + taskCount + ' tarefa(s).');
+});
+onSock('backup_error', ({ message } = {}) => {
+  const exportButton = document.getElementById('exportSubmissionsBtn');
+  exportButton.disabled = false;
+  exportButton.textContent = 'Descarregar entregas (.zip)';
+  logEvent(message || 'Não foi possível processar o backup.');
+});
+document.getElementById('exportSubmissionsBtn').onclick = () => {
+  if (!socket || !socket.connected) { logEvent('Sem ligação ao servidor — não foi possível exportar.'); return; }
+  document.getElementById('exportSubmissionsBtn').disabled = true;
+  document.getElementById('exportSubmissionsBtn').textContent = 'A preparar ZIP…';
+  emitSock('export_submissions', { roomId: roomInput.value });
+};
+onSock('submissions_zip', ({ roomId, fileName, data } = {}) => {
+  const button = document.getElementById('exportSubmissionsBtn');
+  button.disabled = false;
+  button.textContent = 'Descarregar entregas (.zip)';
+  if (roomId !== roomInput.value || !data) return;
+  const blob = new Blob([data], { type: 'application/zip' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName || 'entregas.zip';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+  logEvent('ZIP das entregas descarregado.');
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeInviteModal();
+});
 
 // ---------- congelar ----------
 function updateFreezeUI() {
@@ -851,22 +1059,39 @@ onSock('room_state', (list) => {
   });
   prevOnline = nowOnline;
   students.clear();
-  list.forEach(s => students.set(s.studentId, { name: s.name, language: s.language, code: s.code || '', online: s.online !== false, updatedAt: s.updatedAt || 0 }));
+  list.forEach(s => students.set(s.studentId, {
+    name: s.name, language: s.language, code: s.code || '', online: s.online !== false,
+    updatedAt: s.updatedAt || 0, joinedAt: s.joinedAt || 0, lastSeenAt: s.lastSeenAt || 0,
+    progressStatus: s.progressStatus || 'not_started', progressUpdatedAt: s.progressUpdatedAt || 0
+  }));
   if (!focusId || !students.has(focusId)) focusId = [...students.keys()][0] || null;
   saveRosterCache();
   render();
   renderTaskHistory();
 });
-onSock('code_update', ({ studentId, name, code, language }) => {
-  students.set(studentId, { name, language, code, online: true, updatedAt: Date.now() });
+onSock('code_update', ({ studentId, name, code, language, progressStatus, progressUpdatedAt, joinedAt, lastSeenAt }) => {
+  const previous = students.get(studentId) || {};
+  students.set(studentId, {
+    ...previous, name, language, code, online: true, updatedAt: Date.now(),
+    progressStatus: progressStatus || 'working', progressUpdatedAt: progressUpdatedAt || Date.now(),
+    joinedAt: joinedAt || previous.joinedAt || 0, lastSeenAt: lastSeenAt || Date.now()
+  });
   if (!focusId) focusId = studentId;
   saveRosterCache();
   render();
 });
 onSock('student_left', ({ studentId }) => {
   const s = students.get(studentId);
-  if (s) { s.online = false; saveRosterCache(); render(); renderTaskHistory(); }
+  if (s) { s.online = false; s.lastSeenAt = Date.now(); saveRosterCache(); render(); renderTaskHistory(); }
 });
+function progressLabel(status) {
+  if (status === 'help') return 'Precisa de ajuda';
+  if (status === 'working') return 'A trabalhar';
+  return 'Ainda não começou';
+}
+function formatAttendance(timestamp) {
+  return timestamp ? new Date(timestamp).toLocaleString() : '—';
+}
 
 // ================= render =================
 const list = document.getElementById('studentList');
@@ -885,8 +1110,10 @@ function render() {
     b.innerHTML =
       '<span class="w-8 h-8 rounded-full grid place-items-center text-xs font-bold shrink-0" style="background:' + avColor(id) + '">' + escapeHtml((s.name.trim()[0] || 'A').toUpperCase()) + '</span>' +
       '<span class="min-w-0"><span class="block text-xs font-medium truncate">' + escapeHtml(s.name) + '</span>' +
-      '<span class="block text-[11px] ' + (s.online ? 'text-slate-500' : 'text-slate-600') + '">' + (s.online ? '● Online' : '○ Offline') + '</span></span>' +
+      '<span class="block text-[11px] ' + (s.progressStatus === 'help' ? 'text-amber-300' : (s.online ? 'text-slate-400' : 'text-slate-600')) + '">' +
+      (s.online ? '● Online' : '○ Offline') + ' • ' + escapeHtml(progressLabel(s.progressStatus)) + '</span></span>' +
       '<span class="ml-auto text-slate-600">›</span>';
+    b.title = 'Entrou: ' + formatAttendance(s.joinedAt) + ' • Última atividade: ' + formatAttendance(s.lastSeenAt);
     b.onclick = () => { focusId = id; render(); };
     list.appendChild(b);
   });
@@ -903,11 +1130,14 @@ function render() {
       '<div class="flex items-center gap-2 px-3 py-2 border-b border-slate-800">' +
         '<span class="w-8 h-8 rounded-full grid place-items-center text-xs font-bold shrink-0" style="background:' + avColor(id) + '">' + escapeHtml((s.name.trim()[0] || 'A').toUpperCase()) + '</span>' +
         '<span class="min-w-0"><span class="block text-xs font-medium truncate">' + escapeHtml(s.name) + (s.online === false ? ' <span class="text-[10px] text-slate-500">(offline)</span>' : '') + '</span>' +
-        '<span class="block text-[11px] ' + (s.online ? 'text-slate-500' : 'text-slate-600') + '">' + (s.online ? '● Online' : '○ Offline') + '</span></span>' +
+        '<span class="block text-[11px] ' + (s.progressStatus === 'help' ? 'text-amber-300' : (s.online ? 'text-slate-500' : 'text-slate-600')) + '">' +
+        (s.online ? '● Online' : '○ Offline') + ' • ' + escapeHtml(progressLabel(s.progressStatus)) + '</span></span>' +
         '<span class="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">' + escapeHtml(s.language) + '</span>' +
       '</div>' +
       '<div class="mini-code p-3 h-28 text-slate-300">' + (escapeHtml((s.code || '').slice(0, 220)) || '<span class="text-slate-600">a aguardar código...</span>') + '</div>' +
-      '<div class="px-3 py-1.5 text-[11px] text-slate-500 border-t border-slate-800">' + (s.code || '').length + ' chars • ' + (s.online === false ? 'offline' : 'live') + '</div>';
+      '<div class="px-3 py-1.5 text-[11px] text-slate-500 border-t border-slate-800">' +
+      escapeHtml(progressLabel(s.progressStatus)) + ' • Entrou ' + escapeHtml(formatAttendance(s.joinedAt)) +
+      ' • Última atividade ' + escapeHtml(formatAttendance(s.lastSeenAt)) + ' • ' + (s.code || '').length + ' chars</div>';
     card.onclick = () => {
       focusId = id;
       document.getElementById('boardFocus').classList.remove('hidden');
@@ -959,7 +1189,11 @@ document.getElementById('focusClear').onclick = () => { focusId = null; render()
 // Mostra o último roster guardado neste PC (inclui offline) até chegar o estado live
 try {
   const cached = JSON.parse(localStorage.getItem('ccl-roster:' + roomInput.value) || '[]');
-  cached.forEach(([id, s]) => students.set(id, { name: s.name, language: s.language, code: s.code || '', online: false, updatedAt: s.updatedAt || 0 }));
+  cached.forEach(([id, s]) => students.set(id, {
+    name: s.name, language: s.language, code: s.code || '', online: false,
+    updatedAt: s.updatedAt || 0, joinedAt: s.joinedAt || 0, lastSeenAt: s.lastSeenAt || 0,
+    progressStatus: s.progressStatus || 'not_started', progressUpdatedAt: s.progressUpdatedAt || 0
+  }));
   if (cached.length) { focusId = cached[0][0]; render(); }
 } catch (e) {}
 
