@@ -337,12 +337,17 @@
           </div>
         </div>
         <!-- editor + terminal -->
-          <div id="wcolss="h-28 overflow-auto px-3 py-2 text-xs text-emerald-100 font-mono">Terminal pronto. Escreve Python na linha &gt;&gt;&gt; ou prime ▶ Executar.</pre>
-            <div class="flex items-center gap-1.5 px-3 py-1.5 border-t border-slate-800 text-xs font-mono">
-              <span id="wps1" class="text-emerald-400 shrink-0">&gt;&gt;&gt; </span>
-              <input id="wcmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="escreve aqui… (Enter executa, ↑↓ histórico, Esc cancela)" class="flex-1 min-w-0 bg-transparent outline-none text-emerald-100 placeholder:text-slate-600" />
+        <div id="wcols" class="flex flex-col gap-2 min-h-0 p-3">
+          <div id="weditor" class="overflow-hidden rounded-lg border border-slate-800"></div>
+          <div id="wspaceResize" class="workspace-resize" role="separator" tabindex="0" aria-label="Redimensionar editor e terminal" aria-orientation="horizontal" aria-valuemin="120" aria-valuenow="256"></div>
+          <section id="wterm" class="flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+            <div class="shrink-0 border-b border-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300">Terminal</div>
+            <pre id="woutput" data-empty="1" class="h-28 overflow-auto px-3 py-2 text-xs text-emerald-100 font-mono">Terminal pronto. Escreve Python na linha &gt;&gt;&gt; ou prime ▶ Executar.</pre>
+            <div class="flex shrink-0 items-center gap-1.5 border-t border-slate-800 px-3 py-1.5 text-xs font-mono">
+              <span id="wps1" class="shrink-0 text-emerald-400">&gt;&gt;&gt; </span>
+              <input id="wcmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="escreve aqui… (Enter executa, ↑↓ histórico, Esc cancela)" class="min-w-0 flex-1 bg-transparent outline-none text-emerald-100 placeholder:text-slate-600" />
             </div>
-          </div>
+          </section>
         </div>
       </section>
     </main>
