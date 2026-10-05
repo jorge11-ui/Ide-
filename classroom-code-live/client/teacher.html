@@ -322,7 +322,7 @@
         <!-- barra de tabs do ficheiro -->
         <div class="flex items-center gap-1 px-3 pt-2 shrink-0">
           <div id="wfileTabs" class="flex items-center gap-1 overflow-x-auto" role="group" aria-label="Ficheiros do workspace"></div>
-          <button id="wnewBtn" title="Criar um novo ficheiro de exemplo" aria-label="Criar novo ficheiro" class="shrink-0 w-7 h-7 grid place-items-center rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 text-lg">+</button>
+          <button id="wnewBtn" title="Criar um ficheiro vazio" aria-label="Criar novo ficheiro" class="shrink-0 w-7 h-7 grid place-items-center rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 text-lg">+</button>
           <div class="ml-auto flex items-center gap-1.5">
             <span class="text-[11px] font-mono px-2 py-1 rounded bg-slate-800 text-slate-300">Python ▾</span>
             <button id="wrunBtn" title="Executar (Ctrl+Enter)" class="w-7 h-7 grid place-items-center rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">▶</button>
@@ -1205,14 +1205,25 @@ let wpy = null;
 let workspaceFiles = [];
 let activeWorkspaceFileId = 'workspace';
 function workspaceFilesKey(room) { return 'ccl-teacher-files:' + room; }
+function isOldWorkspaceStarter(code) {
+  const normalized = code.replace(/\r\n/g, '\n').trim();
+  return normalized === '# Workspace da professora — para programar com o projetor.' ||
+    normalized === '# Workspace da professora — para programar com o projetor.\n\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
+}
 function defaultWorkspaceCode() {
-  return '# Workspace da professora — para programar com o projetor.\n\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
+  return '';
+}
+function normalizeWorkspaceFiles(files) {
+  return files.map(file => ({
+    ...file,
+    code: isOldWorkspaceStarter(file.code) ? '' : file.code
+  }));
 }
 function loadWorkspaceForRoom(room) {
   try {
     const saved = JSON.parse(localStorage.getItem(workspaceFilesKey(room)) || 'null');
     if (saved && Array.isArray(saved.files)) {
-      const files = saved.files.filter(file => file && typeof file.id === 'string' && typeof file.name === 'string' && typeof file.code === 'string');
+      const files = normalizeWorkspaceFiles(saved.files.filter(file => file && typeof file.id === 'string' && typeof file.name === 'string' && typeof file.code === 'string'));
       if (files.length) {
         const activeFileId = files.some(file => file.id === saved.activeFileId)
           ? saved.activeFileId
@@ -1222,7 +1233,7 @@ function loadWorkspaceForRoom(room) {
     }
     const legacyCode = localStorage.getItem('ccl-teacher:' + room);
     return {
-      files: [{ id: 'workspace', name: 'workspace.py', code: legacyCode || defaultWorkspaceCode() }],
+      files: [{ id: 'workspace', name: 'workspace.py', code: legacyCode && !isOldWorkspaceStarter(legacyCode) ? legacyCode : defaultWorkspaceCode() }],
       activeFileId: 'workspace'
     };
   } catch (error) {
@@ -1281,7 +1292,7 @@ function renderWorkspaceFiles() {
   const active = getActiveWorkspaceFile();
   if (active) {
     document.getElementById('wdlBtn').textContent = 'Descarregar ' + active.name;
-    document.getElementById('wnewBtn').title = 'Criar um novo ficheiro de exemplo';
+    document.getElementById('wnewBtn').title = 'Criar um ficheiro vazio';
   }
 }
 function switchWorkspaceFile(fileId) {
@@ -1298,14 +1309,12 @@ function switchWorkspaceFile(fileId) {
 }
 function createWorkspaceFile() {
   if (!weditor) return;
-  const exampleNumber = workspaceFiles.reduce((max, file) => {
-    const match = file.name.match(/^exemplo-(\d+)\.py$/i);
-    return match ? Math.max(max, Number(match[1])) : max;
-  }, 1) + 1;
+  let fileNumber = workspaceFiles.length + 1;
+  while (workspaceFiles.some(file => file.name.toLowerCase() === 'ficheiro-' + fileNumber + '.py')) fileNumber++;
   const file = {
     id: 'file-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
-    name: 'exemplo-' + exampleNumber + '.py',
-    code: '# Exemplo ' + exampleNumber + '\n\n'
+    name: 'ficheiro-' + fileNumber + '.py',
+    code: ''
   };
   const current = getActiveWorkspaceFile();
   if (current) current.code = weditor.getValue();
@@ -1336,13 +1345,22 @@ function closeWorkspaceFile(fileId) {
   const index = workspaceFiles.findIndex(file => file.id === fileId);
   if (index < 0) return;
   const file = workspaceFiles[index];
-  if (!confirm('Fechar ' + file.name + '? O ficheiro será removido deste workspace.')) return;
   if (fileId === activeWorkspaceFileId && weditor) file.code = weditor.getValue();
+  if (confirm('Descarregar uma cópia de "' + file.name + '" antes de o fechar? OK descarrega; Cancelar fecha sem descarregar.')) {
+    downloadWorkspaceFile(file);
+  }
   workspaceFiles.splice(index, 1);
   if (fileId === activeWorkspaceFileId) {
     const next = workspaceFiles[Math.min(index, workspaceFiles.length - 1)];
     activeWorkspaceFileId = next.id;
     weditor.setValue(next.code);
+  }
+  function downloadWorkspaceFile(file) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([file.code], { type: 'text/x-python;charset=utf-8' }));
+    a.download = file.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
   renderWorkspaceFiles();
   saveWorkspaceForRoom(roomInput.value);
@@ -1578,11 +1596,11 @@ document.getElementById('wnewBtn').onclick = createWorkspaceFile;
 document.getElementById('wmenuBtn').onclick = (e) => { e.stopPropagation(); document.getElementById('wmenu').classList.toggle('hidden'); };
 document.getElementById('wdlBtn').onclick = () => {
   if (!weditor) return;
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([weditor.getValue()], { type: 'text/plain;charset=utf-8' }));
-  a.download = getActiveWorkspaceFile().name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  const activeFile = getActiveWorkspaceFile();
+  if (!activeFile) return;
+  activeFile.code = weditor.getValue();
+  saveWorkspaceForRoom(roomInput.value);
+  downloadWorkspaceFile(activeFile);
 };
 document.getElementById('wcopyBtn').onclick = async () => {
   if (!weditor) return;
@@ -1635,6 +1653,7 @@ require(['vs/editor/editor.main'], function () {
   });
   renderWorkspaceFiles();
   window._wroom = roomInput.value;
+  saveWorkspaceForRoom(roomInput.value);
   let wt;
   weditor.onDidChangeModelContent(() => {
     clearTimeout(wt);

@@ -4,18 +4,22 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Classroom Code Live — Aluno</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
 <script>try { if ((localStorage.getItem('ccl-theme') || 'dark') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}</script>
 <style>
   html, body { height: 100%; }
-  #editor { flex: 1 1 auto; min-height: 120px; }
-  #consolePanel { height: var(--console-height, 12rem); flex: 0 0 var(--console-height, 12rem); min-height: 120px; }
+  #editorWorkspace { display: flex; flex: 1 1 auto; flex-direction: row; min-width: 0; min-height: 0; }
+  #editor { flex: 1 1 0; min-width: 120px; min-height: 120px; }
+  #consolePanel { width: var(--console-width, 34%); flex: 0 0 var(--console-width, 34%); min-width: 220px; min-height: 120px; }
   .resize-handle {
     position: relative;
     z-index: 2;
     flex: 0 0 10px;
-    cursor: row-resize;
+    cursor: col-resize;
     touch-action: none;
     display: grid;
     place-items: center;
@@ -24,20 +28,117 @@
   }
   .resize-handle::after {
     content: "";
-    width: 44px;
-    height: 3px;
+    width: 3px;
+    height: 44px;
     border-radius: 999px;
     background: currentColor;
     opacity: .55;
     transition: width .15s ease, opacity .15s ease, background-color .15s ease;
   }
   .resize-handle:hover::after, .resize-handle:focus-visible::after, .resize-handle.is-resizing::after {
-    width: 64px;
+    height: 64px;
     opacity: 1;
     background: #8b5cf6;
   }
   .resize-handle:focus-visible { outline: 2px solid #8b5cf6; outline-offset: -2px; }
-  #output { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; line-height: 1.5; }
+  #output, #consoleInputValue, #consoleInputPrompt, #consoleInputStatus, #runLabel { font-family: var(--code-font-family, "JetBrains Mono"), ui-monospace, Consolas, monospace; }
+  #output { font-size: 12.5px; line-height: 1.5; }
+  #consoleInputForm:not(.hidden) { display: flex; }
+  #consoleInputForm.hidden { display: none; }
+  #consolePanel { background: #0f172a; border-color: #1e293b; }
+  #consolePanel > div { border-color: #1e293b; }
+  #output { color: #cbd5e1; }
+  #consoleInputForm { border-color: #1e293b; }
+  #consoleInputValue { color: #f1f5f9; }
+  #consoleInputPrompt { color: #34d399; }
+  #consoleInputStatus { color: #64748b; }
+  #runLabel { color: #94a3b8; }
+  body.light #consolePanel { background: #fff; border-color: #e2e8f0; }
+  body.light #consolePanel > div, body.light #consoleInputForm { border-color: #e2e8f0; }
+  body.light #consolePanel .font-semibold { color: #0f172a !important; }
+  body.light #consolePanel .text-slate-600, body.light #runLabel { color: #64748b !important; }
+  body.light #output { color: #0f172a !important; }
+  body.light #output .text-red-400 { color: #dc2626 !important; }
+  body.light #output .text-slate-600 { color: #94a3b8 !important; }
+  body.light #consoleInputValue { color: #0f172a !important; }
+  body.light #consoleInputPrompt { color: #047857; }
+  body.light #consoleInputStatus { color: #64748b; }
+  @media (max-width: 760px) {
+    #editorWorkspace { flex-direction: column; }
+    #editor { flex: 1 1 auto; width: 100%; min-width: 0; }
+    #consolePanel { width: 100%; flex: 0 0 var(--console-height, 12rem); height: var(--console-height, 12rem); min-width: 0; }
+    .resize-handle { flex-basis: 10px; cursor: row-resize; }
+    .resize-handle::after { width: 44px; height: 3px; }
+    .resize-handle:hover::after, .resize-handle:focus-visible::after, .resize-handle.is-resizing::after { width: 64px; height: 3px; }
+  }
+  body.light #consoleInputForm { border-color: #e2e8f0 !important; }
+  body.light #consoleInputForm input { color: #0f172a !important; }
+  #studentTasksPanel:not(.hidden) {
+    position: fixed;
+    z-index: 30;
+    top: var(--student-tasks-top, 8rem);
+    left: 50%;
+    display: block;
+    width: min(56rem, calc(100vw - 2rem));
+    max-height: min(60vh, 34rem);
+    transform: translateX(-50%);
+    overflow: auto;
+    border: 1px solid #334155;
+    border-radius: 1rem;
+    background: #0f172a;
+    box-shadow: 0 24px 70px rgba(2, 6, 23, .55);
+  }
+  #studentTasksPanel:not(.hidden) > div { padding: 1rem; }
+  #studentTasksPanel:not(.hidden) h2 { font-size: .95rem; }
+  #studentTasksPanel:not(.hidden) .student-tasks-header {
+    position: sticky;
+    z-index: 1;
+    top: -1rem;
+    margin: -1rem -1rem .75rem;
+    padding: .85rem 1rem;
+    border-bottom: 1px solid rgba(148, 163, 184, .14);
+    background: #0f172a;
+  }
+  #studentTasksPanel:not(.hidden) #studentTaskList {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  }
+  #studentTasksPanel:not(.hidden) .student-task-card {
+    border-color: rgba(148, 163, 184, .2);
+    background: linear-gradient(145deg, rgba(30, 41, 59, .72), rgba(2, 6, 23, .62));
+    padding: 1rem;
+    box-shadow: inset 0 1px rgba(255, 255, 255, .025);
+  }
+  #studentTasksPanel:not(.hidden) .student-task-card .task-description { line-height: 1.55; }
+  #studentTasksPanel:not(.hidden) .student-task-card button { min-height: 2.25rem; }
+  #studentTasksPanel:not(.hidden) #studentTaskStatus:not(:empty) {
+    border-radius: 999px;
+    background: rgba(16, 185, 129, .08);
+    padding: .25rem .6rem;
+    color: #6ee7b7;
+  }
+  #studentTasksPanel:not(.hidden) #studentTaskList > p { grid-column: 1 / -1; }
+  #studentTasksBackdrop:not(.hidden) { display: block; }
+  body.light #studentTasksBackdrop { background: rgba(15, 23, 42, .24); }
+  body.light #studentTasksPanel:not(.hidden) { border-color: #cbd5e1; box-shadow: 0 24px 70px rgba(15, 23, 42, .2); }
+  body.light #studentTasksPanel:not(.hidden) .student-tasks-header { background: #fff; border-color: #e2e8f0; }
+  body.light #studentTasksPanel:not(.hidden) .student-task-card { background: #f8fafc; border-color: #dbe3ef; }
+  body.light #studentTasksPanel:not(.hidden) #studentTaskStatus:not(:empty) { background: #ecfdf5; color: #047857; }
+  @media (max-width: 640px) {
+    #studentTasksPanel:not(.hidden) {
+      top: var(--student-tasks-top, 8rem);
+      width: calc(100vw - 1rem);
+      max-height: calc(100dvh - var(--student-tasks-top, 8rem) - .75rem);
+    }
+    #studentTasksPanel:not(.hidden) > div { padding: .75rem; }
+    #studentTasksPanel:not(.hidden) .student-tasks-header {
+      top: -.75rem;
+      margin: -.75rem -.75rem .65rem;
+      padding: .7rem .75rem;
+    }
+    #studentTasksPanel:not(.hidden) #studentTaskList { grid-template-columns: minmax(0, 1fr); }
+    #toolbar { gap: .4rem; padding: .55rem .65rem; }
+    #toolbar #nameInput { flex: 1 1 8rem; width: auto; }
+  }
   /* Evita flash escuro para quem gravou o tema claro */
   html[data-theme="light"] body { background: #f8fafc; color: #0f172a; }
   /* Tema claro: overrides sobre as classes dark do Tailwind */
@@ -53,12 +154,6 @@
   body.light .student-task-card .task-description { color: #475569 !important; }
   body.light #editor { border-top: 1px solid #e2e8f0; }
   body.light .resize-handle { color: #94a3b8; }
-  body.light #consolePanel { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
-  body.light #consolePanel .font-semibold, body.light #consolePanel .text-slate-300 { color: #0f172a !important; }
-  body.light #consolePanel .text-slate-500, body.light #consolePanel .text-slate-600 { color: #64748b !important; }
-  body.light #output { color: #0f172a !important; }
-  body.light #output .text-red-400 { color: #dc2626 !important; }
-  body.light #output .text-slate-600 { color: #94a3b8 !important; }
   body.light footer { background-color: #ffffff !important; border-color: #e2e8f0 !important; color: #64748b !important; }
   /* Menu Definições */
   .menu-item { display: block; width: 100%; text-align: left; font-size: 13px; padding: 6px 8px; border-radius: 6px; color: #e2e8f0; }
@@ -148,10 +243,16 @@
           <option value="dark">Escuro</option>
           <option value="light">Claro</option>
         </select>
+        <label for="fontSelect" class="menu-label block">FONTE DO CÓDIGO</label>
+        <select id="fontSelect" title="Fonte do editor e da consola" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
+          <option value="jetbrains">JetBrains Mono</option>
+          <option value="fira">Fira Code</option>
+          <option value="ibm">IBM Plex Mono</option>
+        </select>
         <hr class="border-slate-700" />
         <button id="uploadBtn" title="Carregar um ficheiro de código do computador para o editor" class="menu-item">Upload de código…</button>
         <button id="dlBtn" title="Descarrega o código como ficheiro para o computador" class="menu-item">Descarregar código</button>
-        <button id="newBtn" title="Limpar e começar do zero (apaga o guardado desta sala+linguagem)" class="menu-item">Novo (começar do zero)</button>
+        <button id="newBtn" title="Descarrega opcionalmente uma cópia e começa com o editor vazio" class="menu-item">Novo (editor vazio)</button>
         <button id="clearBtn" class="menu-item">Limpar consola</button>
       </div>
     </div>
@@ -161,35 +262,44 @@
     <button id="studentTasksToggle" type="button" class="ml-auto rounded border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-sm font-medium text-violet-200 hover:bg-violet-500/20" aria-expanded="false" aria-controls="studentTasksPanel">Tarefas <span id="studentTaskCount" class="ml-1 rounded-full bg-violet-500/20 px-1.5 text-xs">0</span></button>
   </div>
 
-  <section id="studentTasksPanel" class="hidden max-h-[38vh] shrink-0 overflow-auto border-b border-slate-800 bg-slate-900 px-4 py-3" aria-label="Tarefas da turma">
+  <button id="studentTasksBackdrop" type="button" class="hidden fixed inset-0 z-20 bg-slate-950/55 backdrop-blur-[1px]" aria-label="Fechar tarefas"></button>
+  <section id="studentTasksPanel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="studentTasksHeading" tabindex="-1">
     <div class="mx-auto max-w-5xl">
-      <div class="mb-2 flex items-center gap-2">
-        <h2 class="text-sm font-semibold">Tarefas da turma</h2>
-        <span id="studentTaskStatus" role="status" aria-live="polite" class="ml-auto text-xs text-slate-500"></span>
+      <div class="student-tasks-header mb-2 flex items-center gap-2">
+        <h2 id="studentTasksHeading" class="text-sm font-semibold">Tarefas da turma</h2>
+        <span id="studentTaskStatus" role="status" aria-live="polite" class="ml-auto max-w-[55%] truncate text-xs text-slate-500"></span>
         <button id="studentTasksClose" type="button" class="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-800" aria-label="Fechar tarefas">Fechar</button>
       </div>
-      <div id="studentTaskList" class="grid gap-2 md:grid-cols-2"></div>
+      <div id="studentTaskList" class="grid gap-3"></div>
     </div>
   </section>
 
   <!-- Aviso de turma congelada -->
   <div id="freezeBanner" class="hidden px-4 py-1.5 text-xs font-semibold text-center bg-red-600 text-white">Turma congelada pela professora — editor só de leitura</div>
 
-  <!-- Editor -->
-  <div id="editor"></div>
+  <div id="editorWorkspace">
+    <!-- Editor -->
+    <div id="editor"></div>
 
-  <div id="editorConsoleResize" class="resize-handle" role="separator" aria-orientation="horizontal" aria-label="Redimensionar editor e consola" aria-controls="editor consolePanel" aria-valuemin="120" aria-valuenow="192" tabindex="0" title="Arrasta para ajustar o espaço do editor e da consola"></div>
+    <div id="editorConsoleResize" class="resize-handle" role="separator" aria-orientation="vertical" aria-label="Redimensionar editor e consola" aria-controls="editor consolePanel" aria-valuemin="220" aria-valuenow="34" tabindex="0" title="Arrasta para ajustar a largura do editor e da consola"></div>
 
-  <!-- Consola / Preview : execução 100% local = rápido -->
-  <section id="consolePanel" class="shrink-0 border-t border-slate-800 bg-slate-900 flex flex-col">
-    <div class="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-slate-800">
-      <span class="font-semibold text-slate-300">Consola</span>
-      <span id="runLabel" class="text-slate-500 font-mono"></span>
-      <span class="ml-auto text-slate-600">Python via Pyodide • corre no browser</span>
-    </div>
-    <pre id="output" class="flex-1 overflow-auto px-4 py-2 text-slate-300">Prime <b>▶ Executar</b> para ver o resultado aqui.</pre>
-    <iframe id="preview" class="flex-1 w-full bg-white hidden" sandbox="allow-scripts" title="preview"></iframe>
-  </section>
+    <!-- Consola / Preview : execução 100% local = rápido -->
+    <section id="consolePanel" class="shrink-0 border-l border-slate-800 bg-slate-900 flex flex-col">
+      <div class="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-slate-800">
+        <span class="font-semibold text-slate-300">Consola</span>
+        <span id="runLabel" class="text-slate-500 font-mono"></span>
+        <span class="ml-auto text-slate-600">Python via Pyodide • corre no browser</span>
+      </div>
+      <pre id="output" class="flex-1 overflow-auto px-4 py-2 text-slate-300">Prime <b>▶ Executar</b> para ver o resultado aqui.</pre>
+      <form id="consoleInputForm" class="hidden shrink-0 items-center gap-2 border-t border-slate-800 px-4 py-2" autocomplete="off">
+        <label id="consoleInputPrompt" for="consoleInputValue" class="shrink-0 max-w-[45%] truncate text-xs text-emerald-400">Input:</label>
+        <input id="consoleInputValue" type="text" class="min-w-0 flex-1 bg-transparent text-sm font-mono text-slate-100 outline-none placeholder:text-slate-600" placeholder="Escreve a resposta e prime Enter" aria-label="Resposta para input do programa" />
+        <button type="submit" class="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-600">Enviar</button>
+        <span id="consoleInputStatus" class="shrink-0 text-[11px] text-slate-500" aria-live="polite"></span>
+      </form>
+      <iframe id="preview" class="flex-1 w-full bg-white hidden" sandbox="allow-scripts" title="preview"></iframe>
+    </section>
+  </div>
 
   <!-- Statusbar -->
   <footer class="flex items-center gap-4 px-4 py-1.5 text-xs text-slate-400 border-t border-slate-800 bg-slate-900">
@@ -210,8 +320,25 @@ const roomInput = document.getElementById('roomInput');
 const nameInput = document.getElementById('nameInput');
 const langSelect = document.getElementById('langSelect');
 const themeSelect = document.getElementById('themeSelect');
+const fontSelect = document.getElementById('fontSelect');
 const loginNameInput = document.getElementById('loginName');
 const loginRoomInput = document.getElementById('loginRoom');
+const codeFonts = {
+  jetbrains: '"JetBrains Mono"',
+  fira: '"Fira Code"',
+  ibm: '"IBM Plex Mono"'
+};
+function applyCodeFont(font) {
+  const selectedFont = Object.prototype.hasOwnProperty.call(codeFonts, font) ? font : 'jetbrains';
+  fontSelect.value = selectedFont;
+  document.documentElement.style.setProperty('--code-font-family', codeFonts[selectedFont]);
+  if (window._editor) window._editor.updateOptions({ fontFamily: codeFonts[selectedFont] + ', ui-monospace, Consolas, monospace' });
+  try { localStorage.setItem('ccl-code-font', selectedFont); } catch (e) {}
+}
+let savedCodeFont = 'jetbrains';
+try { savedCodeFont = localStorage.getItem('ccl-code-font') || 'jetbrains'; } catch (e) {}
+applyCodeFont(savedCodeFont);
+fontSelect.onchange = () => applyCodeFont(fontSelect.value);
 // Tema gravado: aplica à página já antes do Monaco carregar
 function applyTheme(mode) {
   const light = mode === 'light';
@@ -362,7 +489,7 @@ function renderStudentTasks() {
   document.getElementById('studentTaskCount').textContent = String(tasks.length);
   if (!tasks.length) {
     const empty = document.createElement('p');
-    empty.className = 'rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-500 md:col-span-2';
+    empty.className = 'rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-500';
     empty.textContent = 'Ainda não há tarefas publicadas nesta sala.';
     list.appendChild(empty);
     return;
@@ -465,16 +592,36 @@ function submitTask(task) {
     language: langSelect.value
   });
 }
-document.getElementById('studentTasksToggle').onclick = () => {
-  const panel = document.getElementById('studentTasksPanel');
-  const open = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden', !open);
-  document.getElementById('studentTasksToggle').setAttribute('aria-expanded', String(open));
+const studentTasksToggle = document.getElementById('studentTasksToggle');
+const studentTasksPanel = document.getElementById('studentTasksPanel');
+function setStudentTasksOpen(open) {
+  studentTasksPanel.classList.toggle('hidden', !open);
+  document.getElementById('studentTasksBackdrop').classList.toggle('hidden', !open);
+  studentTasksToggle.setAttribute('aria-expanded', String(open));
+  if (open) {
+    const toolbarBottom = document.getElementById('toolbar').getBoundingClientRect().bottom;
+    studentTasksPanel.style.setProperty('--student-tasks-top', Math.max(8, toolbarBottom + 8) + 'px');
+    document.getElementById('studentTasksClose').focus();
+  } else {
+    studentTasksToggle.focus();
+  }
+}
+studentTasksToggle.onclick = () => {
+  setStudentTasksOpen(studentTasksPanel.classList.contains('hidden'));
 };
-document.getElementById('studentTasksClose').onclick = () => {
-  document.getElementById('studentTasksPanel').classList.add('hidden');
-  document.getElementById('studentTasksToggle').setAttribute('aria-expanded', 'false');
-};
+document.getElementById('studentTasksClose').onclick = () => setStudentTasksOpen(false);
+document.getElementById('studentTasksBackdrop').onclick = () => setStudentTasksOpen(false);
+window.addEventListener('resize', () => {
+  if (!studentTasksPanel.classList.contains('hidden')) {
+    const toolbarBottom = document.getElementById('toolbar').getBoundingClientRect().bottom;
+    studentTasksPanel.style.setProperty('--student-tasks-top', Math.max(8, toolbarBottom + 8) + 'px');
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !studentTasksPanel.classList.contains('hidden')) {
+    setStudentTasksOpen(false);
+  }
+});
 renderStudentTasks();
 function applyClassTask(task) {
   if (!task || task.roomId !== roomInput.value || !window._editor || !window.monaco) {
@@ -550,37 +697,59 @@ function print(lines, isErr) {
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function showConsole(){ output.classList.remove('hidden'); preview.classList.add('hidden'); }
 function showPreview(){ output.classList.add('hidden'); preview.classList.remove('hidden'); }
-document.getElementById('clearBtn').onclick = () => { output.textContent = ''; showConsole(); runTime.textContent = ''; };
+document.getElementById('clearBtn').onclick = () => {
+  if (pendingConsoleInput) cancelConsoleInput();
+  output.textContent = ''; showConsole(); runTime.textContent = '';
+};
 
-// Resize area between the code editor and console.
+// Resize the console beside the editor on desktop and below it on small screens.
 const editorConsoleResize = document.getElementById('editorConsoleResize');
 const consolePanel = document.getElementById('consolePanel');
 const consoleHeightKey = 'ccl-console-height';
-function setConsoleHeight(height, save) {
-  const editor = document.getElementById('editor');
-  const footer = document.querySelector('body > footer');
-  const minEditorHeight = 120;
-  const available = document.body.clientHeight - editor.offsetTop - footer.offsetHeight - editorConsoleResize.offsetHeight - minEditorHeight;
-  const maxHeight = Math.max(120, Math.min(window.innerHeight * 0.65, available));
-  const next = Math.round(Math.max(120, Math.min(maxHeight, height)));
-  document.documentElement.style.setProperty('--console-height', next + 'px');
-  editorConsoleResize.setAttribute('aria-valuenow', String(next));
+const consoleWidthKey = 'ccl-console-width';
+const editorWorkspace = document.getElementById('editorWorkspace');
+function isConsoleSideBySide() { return window.matchMedia('(min-width: 761px)').matches; }
+function setConsoleExtent(value, save) {
+  const sideBySide = isConsoleSideBySide();
+  const available = sideBySide
+    ? Math.max(220, editorWorkspace.clientWidth - editorConsoleResize.offsetWidth - 120)
+    : Math.max(120, editorWorkspace.clientHeight - editorConsoleResize.offsetHeight - 120);
+  const minimum = sideBySide ? 220 : 120;
+  const maximum = Math.max(minimum, Math.min(available - 120, available * 0.7));
+  const next = Math.round(Math.max(minimum, Math.min(maximum, value)));
+  if (sideBySide) {
+    document.documentElement.style.setProperty('--console-width', next + 'px');
+    editorConsoleResize.setAttribute('aria-orientation', 'vertical');
+    editorConsoleResize.setAttribute('aria-valuemin', '220');
+    editorConsoleResize.setAttribute('aria-valuenow', String(next));
+  } else {
+    document.documentElement.style.setProperty('--console-height', next + 'px');
+    editorConsoleResize.setAttribute('aria-orientation', 'horizontal');
+    editorConsoleResize.setAttribute('aria-valuemin', '120');
+    editorConsoleResize.setAttribute('aria-valuenow', String(next));
+  }
   if (save) {
-    try { localStorage.setItem(consoleHeightKey, String(next)); } catch (e) {}
+    try { localStorage.setItem(sideBySide ? consoleWidthKey : consoleHeightKey, String(next)); } catch (e) {}
   }
   if (window._editor) window._editor.layout();
 }
 try {
-  const savedConsoleHeight = Number(localStorage.getItem(consoleHeightKey));
-  if (Number.isFinite(savedConsoleHeight) && savedConsoleHeight >= 120) setConsoleHeight(savedConsoleHeight, false);
+  const sideBySide = isConsoleSideBySide();
+  const savedExtent = Number(localStorage.getItem(sideBySide ? consoleWidthKey : consoleHeightKey));
+  if (Number.isFinite(savedExtent) && savedExtent >= (sideBySide ? 220 : 120)) setConsoleExtent(savedExtent, false);
+  else if (sideBySide) setConsoleExtent(editorWorkspace.clientWidth * 0.34, false);
 } catch (e) {}
 editorConsoleResize.addEventListener('pointerdown', (event) => {
   event.preventDefault();
   editorConsoleResize.setPointerCapture(event.pointerId);
   editorConsoleResize.classList.add('is-resizing');
-  const startY = event.clientY;
-  const startHeight = consolePanel.getBoundingClientRect().height;
-  const resize = (moveEvent) => setConsoleHeight(startHeight + startY - moveEvent.clientY, true);
+  const sideBySide = isConsoleSideBySide();
+  const startPosition = sideBySide ? event.clientX : event.clientY;
+  const startExtent = sideBySide ? consolePanel.getBoundingClientRect().width : consolePanel.getBoundingClientRect().height;
+  const resize = (moveEvent) => {
+    const position = sideBySide ? moveEvent.clientX : moveEvent.clientY;
+    setConsoleExtent(startExtent + startPosition - position, true);
+  };
   const stop = () => {
     editorConsoleResize.classList.remove('is-resizing');
     editorConsoleResize.removeEventListener('pointermove', resize);
@@ -592,13 +761,23 @@ editorConsoleResize.addEventListener('pointerdown', (event) => {
   editorConsoleResize.addEventListener('pointercancel', stop);
 });
 editorConsoleResize.addEventListener('keydown', (event) => {
-  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+  const sideBySide = isConsoleSideBySide();
+  const decrease = sideBySide ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';
+  const increase = sideBySide ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
+  if (decrease || increase) {
     event.preventDefault();
-    const current = consolePanel.getBoundingClientRect().height;
-    setConsoleHeight(current + (event.key === 'ArrowUp' ? 16 : -16), true);
+    const current = sideBySide ? consolePanel.getBoundingClientRect().width : consolePanel.getBoundingClientRect().height;
+    setConsoleExtent(current + (increase ? 16 : -16), true);
   }
 });
-window.addEventListener('resize', () => setConsoleHeight(consolePanel.getBoundingClientRect().height, false));
+window.addEventListener('resize', () => {
+  const sideBySide = isConsoleSideBySide();
+  let savedExtent = null;
+  try { savedExtent = Number(localStorage.getItem(sideBySide ? consoleWidthKey : consoleHeightKey)); } catch (e) {}
+  if (Number.isFinite(savedExtent) && savedExtent >= (sideBySide ? 220 : 120)) setConsoleExtent(savedExtent, false);
+  else if (sideBySide) setConsoleExtent(editorWorkspace.clientWidth * 0.34, false);
+  else setConsoleExtent(consolePanel.getBoundingClientRect().height, false);
+});
 
 // Python via Pyodide, pré-carregado em fundo para o Run ser rápido
 let pyodidePromise = null;
@@ -614,35 +793,99 @@ window.addEventListener('load', () => {
     }).catch(() => { document.getElementById('pyStatus').textContent = 'py: falhou (sem net?)'; });
   }, 1500);
 });
-async function runPython(code) {
+let pendingConsoleInput = null;
+const consoleInputForm = document.getElementById('consoleInputForm');
+const consoleInputValue = document.getElementById('consoleInputValue');
+const consoleInputPrompt = document.getElementById('consoleInputPrompt');
+const consoleInputStatus = document.getElementById('consoleInputStatus');
+function showConsoleInput(prompt) {
+  consoleInputPrompt.textContent = prompt || 'Input:';
+  consoleInputStatus.textContent = 'À espera';
+  consoleInputValue.value = '';
+  consoleInputForm.classList.remove('hidden');
+  consoleInputValue.focus();
+}
+function cancelConsoleInput() {
+  pendingConsoleInput = null;
+  consoleInputForm.classList.add('hidden');
+  consoleInputValue.value = '';
+  consoleInputStatus.textContent = '';
+  runBtn.disabled = false;
+  runBtn.innerHTML = '▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span>';
+}
+consoleInputForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!pendingConsoleInput) return;
+  pendingConsoleInput.answers.push(consoleInputValue.value);
+  const { code, answers } = pendingConsoleInput;
+  consoleInputForm.classList.add('hidden');
+  executePython(code, answers);
+});
+async function runPython(code, answers) {
   const py = await getPyodide();
   const logs = [];
   py.setStdout({ batched: (s) => logs.push(s) });
   py.setStderr({ batched: (s) => logs.push('[erro] ' + s) });
-  let patched = code;
-  if (/input\s*\(/.test(code)) {
-    logs.push('[aviso] input() não suportado nesta versão rápida — a retornar "".');
-    patched = 'def input(prompt=""):\n    return ""\n' + code;
-  }
-  await py.runPythonAsync(patched);
-  return { ok: true, logs };
+  // Replay with queued answers because Pyodide cannot await browser input() synchronously.
+  const wrapper = [
+    'import json as _ccl_json',
+    '_ccl_answers = ' + JSON.stringify(answers),
+    'class _CCLNeedInput(BaseException): pass',
+    'def _ccl_input(prompt=""):',
+    '    if not _ccl_answers: raise _CCLNeedInput(str(prompt))',
+    '    answer = _ccl_answers.pop(0)',
+    '    print(str(prompt) + answer)',
+    '    return answer',
+    "_ccl_namespace = {'__name__': '__main__', 'input': _ccl_input}",
+    'try:',
+    '    exec(compile(' + JSON.stringify(code) + ', "<student>", "exec"), _ccl_namespace, _ccl_namespace)',
+    'except _CCLNeedInput as _ccl_error:',
+    '    _ccl_result = {"waiting": True, "prompt": str(_ccl_error)}',
+    'else:',
+    '    _ccl_result = {"waiting": False}',
+    '_ccl_json.dumps(_ccl_result)'
+  ].join('\n');
+  const result = await py.runPythonAsync(wrapper);
+  return { ...JSON.parse(result), logs };
 }
 
 async function run() {
-  if (!window._editor) return;
+  if (!window._editor || pendingConsoleInput) return;
   const code = window._editor.getValue();
+  executePython(code, []);
+}
+async function executePython(code, answers) {
   const t0 = performance.now();
+  let waitingForInput = false;
   runBtn.disabled = true; runBtn.textContent = '⏳ A correr...';
   runLabel.textContent = 'python • ' + code.length + ' chars';
   try {
-    showConsole(); output.textContent = 'A correr Python... (1ª vez pode demorar uns segundos a carregar o Pyodide)';
-    const r = await runPython(code);
-    print(r.logs, false);
+    showConsole();
+    output.textContent = answers.length ? '' : 'A correr Python... (1ª vez pode demorar uns segundos a carregar o Pyodide)';
+    const result = await runPython(code, answers);
+    if (result.waiting) {
+      pendingConsoleInput = { code, answers };
+      if (result.logs.length) print(result.logs, false);
+      else output.textContent = '';
+      showConsoleInput(result.prompt);
+      runBtn.textContent = 'A aguardar input…';
+      waitingForInput = true;
+      return;
+    }
+    pendingConsoleInput = null;
+    consoleInputForm.classList.add('hidden');
+    consoleInputStatus.textContent = '';
+    print(result.logs, false);
     runTime.textContent = Math.round(performance.now() - t0) + 'ms';
   } catch (e) {
+    pendingConsoleInput = null;
+    consoleInputForm.classList.add('hidden');
+    consoleInputStatus.textContent = '';
     showConsole(); print(['⛔ ' + (e && e.message || e)], true);
   } finally {
-    runBtn.disabled = false; runBtn.innerHTML = '▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span>';
+    if (!waitingForInput) {
+      runBtn.disabled = false; runBtn.innerHTML = '▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span>';
+    }
   }
 }
 runBtn.onclick = run;
@@ -650,16 +893,29 @@ window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.ke
 
 // ---------- guardar no computador (localStorage por sala+linguagem) ----------
 function codeKey(room, lang) { return 'ccl-code:' + room + ':' + lang; }
-function defaultTemplate(lang) {
-  return '# Escreve aqui o teu código...\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
+function defaultTemplate() {
+  return '';
 }
-function loadSaved(room, lang) { try { return localStorage.getItem(codeKey(room, lang)); } catch (e) { return null; } }
+function isOldStudentTemplate(code) {
+  const normalized = code.replace(/\r\n/g, '\n').trim();
+  return normalized === '# Escreve aqui o teu código...\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
+}
+function loadSaved(room, lang) {
+  try {
+    const saved = localStorage.getItem(codeKey(room, lang));
+    if (saved !== null && isOldStudentTemplate(saved)) {
+      localStorage.setItem(codeKey(room, lang), '');
+      return '';
+    }
+    return saved;
+  } catch (e) { return null; }
+}
 function saveLocal(room, lang, code) {
   try { localStorage.setItem(codeKey(room, lang), code); } catch (e) { return; }
   const el = document.getElementById('savedLabel');
   if (el) el.textContent = 'Guardado: ' + new Date().toLocaleTimeString();
 }
-document.getElementById('dlBtn').onclick = () => {
+function downloadStudentCode() {
   if (!window._editor) return;
   const ext = 'py';
   const safe = (nameInput.value || 'aluno').replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
@@ -668,10 +924,14 @@ document.getElementById('dlBtn').onclick = () => {
   a.download = safe + '.' + ext;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-};
+}
+document.getElementById('dlBtn').onclick = downloadStudentCode;
 document.getElementById('newBtn').onclick = () => {
   if (!window._editor) return;
-  if (!confirm('Começar do zero? Substitui o código guardado desta sala + linguagem pelo modelo inicial.')) return;
+  if (confirm('Queres descarregar uma cópia do código atual antes de o limpar? Escolhe Cancelar para continuar sem descarregar.')) {
+    downloadStudentCode();
+  }
+  if (!confirm('Começar do zero? O código atual será substituído por um editor vazio.')) return;
   window._editor.setValue(defaultTemplate(langSelect.value));
   saveLocal(roomInput.value, langSelect.value, window._editor.getValue());
   showConsole(); sendUpdate(true);
@@ -699,7 +959,7 @@ require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-edi
 require(['vs/editor/editor.main'], function () {
   const editor = monaco.editor.create(document.getElementById('editor'), {
     value: (loadSaved(roomInput.value, langSelect.value) ?? defaultTemplate(langSelect.value)),
-    language: langSelect.value, theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: window._frozen === true, automaticLayout: true, fontSize: 14, minimap: { enabled: false }
+    language: langSelect.value, theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: window._frozen === true, automaticLayout: true, fontSize: 14, fontFamily: codeFonts[fontSelect.value] + ', ui-monospace, Consolas, monospace', minimap: { enabled: false }
   });
   window._editor = editor;
   pendingTasks.splice(0).forEach(applyClassTask);
