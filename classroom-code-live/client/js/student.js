@@ -265,6 +265,17 @@ function receiveClassTask(task) {
   applyClassTask(task);
   renderStudentTasks();
 }
+function receiveDeletedTask({ taskId } = {}) {
+  if (typeof taskId !== 'string') return;
+  for (let i = pendingTasks.length - 1; i >= 0; i--) {
+    if (pendingTasks[i] && pendingTasks[i].id === taskId) pendingTasks.splice(i, 1);
+  }
+  submittingTasks.delete(taskId);
+  if (studentTasks.delete(taskId)) {
+    document.getElementById('studentTaskStatus').textContent = 'Uma tarefa foi removida pela professora.';
+    renderStudentTasks();
+  }
+}
 let studentProgressStatus = 'not_started';
 function renderStudentProgress() {
   const button = document.getElementById('studentProgressBtn');
@@ -371,6 +382,7 @@ function applyClassTask(task) {
 }
 socket.on('class_task', receiveClassTask);
 socket.on('class_tasks', receiveClassTasks);
+socket.on('task_deleted', receiveDeletedTask);
 socket.on('submission_saved', ({ taskId, submission }) => {
   const task = studentTasks.get(taskId);
   if (task) task.mySubmission = submission;
@@ -800,3 +812,29 @@ require(['vs/editor/editor.main'], function () {
   socket.on('request_state', () => sendUpdate(true));
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => run());
 });
+
+// ---------- anti copy-paste: bloqueia colar e arrastar texto para o editor ----------
+// Cobre Ctrl+V, menu de contexto, colar no telemóvel e drag-and-drop.
+// Só atua dentro do #editor: os outros campos (nome, login, etc.) colam normalmente.
+let pasteNoticeTimer = null;
+function showPasteBlockedNotice() {
+  const notice = document.getElementById('pasteNotice');
+  if (!notice) return;
+  notice.classList.remove('hidden');
+  clearTimeout(pasteNoticeTimer);
+  pasteNoticeTimer = setTimeout(() => notice.classList.add('hidden'), 2500);
+}
+['paste', 'drop'].forEach((eventName) => {
+  document.addEventListener(eventName, (event) => {
+    const target = event.target;
+    if (target && target.closest && target.closest('#editor')) {
+      event.preventDefault();
+      event.stopPropagation();
+      showPasteBlockedNotice();
+    }
+  }, true);
+});
+document.addEventListener('dragover', (event) => {
+  const target = event.target;
+  if (target && target.closest && target.closest('#editor')) event.preventDefault();
+}, true);

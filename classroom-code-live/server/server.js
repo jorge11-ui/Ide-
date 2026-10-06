@@ -663,6 +663,77 @@ io.on('connection', (socket) => {
     io.to(r + ':teachers').emit('teacher_task', teacherTask(task));
   });
 
+  // Only a teacher may delete an assignment from the room they joined.
+  socket.on('delete_task', (payload = {}) => {
+    const { roomId, taskId } = payload && typeof payload === 'object' ? payload : {};
+    const r = String(roomId || myRoom || '');
+    if (!r || myRole !== 'teacher' || r !== myRoom || typeof taskId !== 'string' || !taskId) {
+      socket.emit('task_delete_error', { taskId, message: 'Não foi possível eliminar a tarefa.' });
+      return;
+    }
+    const roomTasks = tasksByRoom.get(r) || [];
+    const index = roomTasks.findIndex(entry => entry && entry.id === taskId);
+    if (index < 0) {
+      socket.emit('task_delete_error', { taskId, message: 'A tarefa já não existe nesta sala.' });
+      return;
+    }
+    const [removed] = roomTasks.splice(index, 1);
+    tasksByRoom.set(r, roomTasks);
+    if (!persistTasks()) {
+      roomTasks.splice(index, 0, removed);
+      tasksByRoom.set(r, roomTasks);
+      socket.emit('task_delete_error', { taskId, message: 'Não foi possível guardar a eliminação.' });
+      return;
+    }
+    io.to(r).emit('task_deleted', { roomId: r, taskId });
+  });
+
+  // Only a teacher may edit an assignment in the room they joined.
+  // Submissions are kept; only title, description and deadline change.
+  socket.on('edit_task', (payload = {}) => {
+    const { roomId, taskId, title, description, deadlineAt } = payload && typeof payload === 'object' ? payload : {};
+    const r = String(roomId || myRoom || '');
+    if (!r || myRole !== 'teacher' || r !== myRoom || typeof taskId !== 'string' || !taskId) {
+      socket.emit('task_edit_error', { taskId, message: 'Não foi possível guardar as alterações.' });
+      return;
+    }
+    const safeTitle = String(title || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120);
+    const safeDescription = String(description || '').replace(/\r\n?/g, '\n').trim().slice(0, 2000);
+    if (!safeTitle || !safeDescription) {
+      socket.emit('task_edit_error', { taskId, message: 'Preenche o título e as instruções da tarefa.' });
+      return;
+    }
+    const safeDeadline = deadlineAt === null || deadlineAt === undefined || deadlineAt === ''
+      ? null
+      : Number(deadlineAt);
+    if (safeDeadline !== null && (!Number.isFinite(safeDeadline) || safeDeadline <= Date.now())) {
+      socket.emit('task_edit_error', { taskId, message: 'O prazo deve ser uma data e hora futuras.' });
+      return;
+    }
+    const roomTasks = tasksByRoom.get(r) || [];
+    const task = roomTasks.find(entry => entry && entry.id === taskId);
+    if (!task) {
+      socket.emit('task_edit_error', { taskId, message: 'A tarefa já não existe nesta sala.' });
+      return;
+    }
+    const previous = { title: task.title, description: task.description, deadlineAt: task.deadlineAt, editedAt: task.editedAt };
+    task.title = safeTitle;
+    task.description = safeDescription;
+    task.deadlineAt = safeDeadline;
+    task.editedAt = Date.now();
+    if (!persistTasks()) {
+      task.title = previous.title;
+      task.description = previous.description;
+      task.deadlineAt = previous.deadlineAt;
+      if (previous.editedAt === undefined) delete task.editedAt;
+      else task.editedAt = previous.editedAt;
+      socket.emit('task_edit_error', { taskId, message: 'Não foi possível guardar as alterações.' });
+      return;
+    }
+    io.to(r).emit('class_task', publicTask(task, null));
+    io.to(r + ':teachers').emit('task_edited', teacherTask(task));
+  });
+
   socket.on('submit_task', (payload = {}) => {
     const { roomId, taskId, code, language } = payload && typeof payload === 'object' ? payload : {};
     const r = String(roomId || myRoom || '');

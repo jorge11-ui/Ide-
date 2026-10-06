@@ -9,26 +9,115 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 <script src="/js/theme-init.js" data-theme-key="ccl-teacher-theme"></script>
+<script>
+  // Sala antecipada: calculada no <head> para o pré-preenchimento
+  // (fim do <body>) mostrar logo a turma certa, sem flash da sala padrão.
+  // Prioridade igual à do teacher.js: localStorage > ?room= > padrão.
+  try {
+    window._earlyTeacherRoom = (function () {
+      var saved = '';
+      try { saved = localStorage.getItem('ccl-teacher-current-room') || ''; } catch (e) {}
+      var fromUrl = '';
+      try { fromUrl = new URLSearchParams(location.search).get('room') || ''; } catch (e) {}
+      return (String(saved || fromUrl || 'room_12A')).trim() || 'room_12A';
+    })();
+  } catch (e) { window._earlyTeacherRoom = 'room_12A'; }
+</script>
 <style>
-  html, body { height: 100%; }
-  #weditor { min-height: 0; }
+  html, body { height: 100%; max-width: 100%; overflow-x: clip; }
+  @supports not (overflow: clip) {
+    html, body { overflow-x: hidden; }
+  }
+  body { width: 100%; }
+  #topbar { position: relative; z-index: 50; max-width: 100%; }
+  .teacher-tools { min-width: 0; max-width: 100%; }
+  #wspace > div:first-child { min-width: 0; max-width: 100%; overflow: hidden; }
+  #mainViews { min-width: 0; max-width: 100%; overflow: hidden; }
+  #colCenter { min-width: 0; max-width: 100%; overflow: hidden; }
+  #weditor { min-height: 0; min-width: 0; }
   .mini-code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.45; white-space: pre; overflow: hidden; }
   .navtab { padding: 6px 12px; font-size: 13px; border-radius: 8px; color: #94a3b8; border-bottom: 2px solid transparent; }
   .navtab:hover { color: #e2e8f0; }
   .navtab.active { color: #fff; border-bottom-color: #8b5cf6; background: rgba(139,92,246,.12); border-radius: 8px 8px 0 0; }
   .menu-label { font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: .06em; }
 
+  /* Modo Projetor: mantém a topbar/nav (para sair) e foca no workspace.
+     As colunas laterais já são escondidas via JS (showCol). Aqui só
+     ampliamos editor + terminal lado a lado. */
+  .projector-mode #wspace {
+    padding: 1rem;
+    overflow-x: hidden;
+  }
+  .projector-mode #wcols {
+    flex-direction: row !important;
+    gap: 1rem;
+    min-height: 420px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .projector-mode #weditor,
+  .projector-mode #wterm {
+    border-color: rgba(139, 92, 246, 0.45);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    min-width: 0;
+    max-width: 100%;
+  }
+  .projector-mode #weditor {
+    flex: 3 1 0 !important;
+    min-height: 420px;
+    height: auto !important;
+  }
+  .projector-mode #wterm {
+    flex: 2 1 0 !important;
+    min-height: 420px;
+    height: auto !important;
+  }
+  .projector-mode #wspaceResize {
+    display: none !important;
+  }
+  .projector-mode #roomHeader {
+    display: none !important;
+  }
+  .projector-mode #wfileTabs {
+    justify-content: flex-start;
+    font-size: 1rem;
+  }
+  .projector-mode #wrunBtn {
+    transform: scale(1.25);
+    margin-left: 0.5rem;
+  }
+  .projector-mode #terminal-container {
+    transform: none;
+    width: auto !important;
+  }
+
+  /* Layout Base do Workspace: editor e terminal com a mesma altura (50/50).
+     Quando o utilizador arrasta o divisor, o JS define --weditor-height
+     no #wcols e o editor passa a altura fixa (ver regra abaixo). */
+  #wspace { overflow-x: hidden; overflow-y: auto; max-width: 100%; }
+  #wcols { flex: 1 1 auto; min-height: 300px; min-width: 0; max-width: 100%; overflow: hidden; }
+  #weditor { flex: 1 1 0; min-height: 180px; height: auto; min-width: 0; max-width: 100%; overflow: hidden; }
+  #wterm { flex: 1 1 0; min-height: 180px; min-width: 0; max-width: 100%; overflow: hidden; }
+  #wcols[style*="--weditor-height"] #weditor { flex: 0 0 var(--weditor-height); height: var(--weditor-height); }
+  #terminal-container { width: 100%; max-width: 100%; height: 100%; min-width: 0; overflow: hidden; }
+  #terminal-container .xterm { height: 100%; max-width: 100%; padding: 4px 8px; overflow: hidden; }
+
   /* Workspace em ecrã inteiro (para projetar): editor + terminal lado a lado */
-  #wspace:fullscreen { background: #020617; padding: 16px; overflow: auto; }
-  #wspace:fullscreen #wcols { flex-direction: row; height: calc(100vh - 150px); }
-  #wspace:fullscreen #weditor { flex: 0 0 var(--weditor-width, 60%); width: auto; height: auto; }
-  #wspace:fullscreen #wterm { flex: 1 1 0; min-width: 180px; }
-  #wspace:fullscreen #woutput { flex: 1; height: auto; min-height: 4rem; font-size: 14px; }
-  #wcols { flex: 1 1 auto; min-height: 300px; }
-  #weditor { flex: 0 0 var(--weditor-height, 16rem); height: var(--weditor-height, 16rem); min-height: 120px; }
-  #wterm { flex: 1 1 0; min-height: 144px; }
-  #woutput { flex: 1 1 auto; height: auto; min-height: 4rem; }
+  #wspace:fullscreen { background: #020617; padding: 16px; overflow: auto; max-width: 100%; }
+  #wspace:fullscreen #wcols { flex-direction: row; height: calc(100vh - 150px); min-width: 0; max-width: 100%; overflow: hidden; }
+  #wspace:fullscreen #weditor { flex: 0 0 var(--weditor-width, 60%); width: auto; height: auto; min-width: 0; max-width: 100%; }
+  #wspace:fullscreen #wterm { flex: 1 1 0; min-width: 0; max-width: 100%; }
+
+  @media (max-width: 900px) {
+    .projector-mode #wcols { flex-direction: column !important; }
+    .projector-mode #weditor, .projector-mode #wterm { flex: 1 1 0 !important; min-height: 200px; height: auto !important; }
+  }
+
   #taskTitle, #taskDescription { transition: border-color .16s ease, box-shadow .16s ease; }
   #taskTitle:focus, #taskDescription:focus { box-shadow: 0 0 0 3px rgba(139, 92, 246, .15); }
   .task-card { border: 1px solid rgba(148, 163, 184, .14); border-radius: .75rem; background: rgba(2, 6, 23, .18); }
@@ -123,12 +212,12 @@
   .rowitem { transition: background-color .16s ease, border-color .16s ease; }
   .remove-student-btn { flex: 0 0 auto; padding: .35rem .45rem; border-radius: .5rem; color: #fca5a5; font-size: .7rem; }
   .remove-student-btn:hover { color: #fff; background: rgba(220, 38, 38, .75); }
-  #search, #searchBoard, #roomInput, #wcmd { transition: border-color .16s ease, box-shadow .16s ease; }
+  #search, #searchBoard, #roomInput { transition: border-color .16s ease, box-shadow .16s ease; }
   #search:focus, #searchBoard:focus, #roomInput:focus {
     box-shadow: 0 0 0 3px rgba(139, 92, 246, .15);
   }
   #wspace { scrollbar-color: #475569 transparent; }
-  #weditor, #focusEditor, #boardEditor { box-shadow: 0 8px 24px rgba(2, 6, 23, .14); }
+  #weditor, #boardEditor { box-shadow: 0 8px 24px rgba(2, 6, 23, .14); }
   #boardGrid > button { box-shadow: 0 8px 22px rgba(2, 6, 23, .14); }
   #boardGrid > button:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(2, 6, 23, .24); }
   #wrunBtn, #qRun { box-shadow: 0 4px 12px rgba(5, 150, 105, .18); }
@@ -184,27 +273,20 @@
   body.light .mini-code { background-color: #f8fafc; color: #334155 !important; }
   body.light #settingsMenu,
   body.light #bellPanel,
-  body.light #profileMenu,
-  body.light #wmenu { background-color: #fff !important; border-color: #dbe3ef !important; }
+  body.light #profileMenu { background-color: #fff !important; border-color: #dbe3ef !important; }
   body.light #settingsMenu button,
   body.light #bellPanel,
-  body.light #profileMenu button,
-  body.light #wmenu button { color: #334155; }
-  body.light #settingsMenu button:hover,
-  body.light #wmenu button:hover { background-color: #f1f5f9 !important; }
+  body.light #profileMenu button { color: #334155; }
+  body.light #settingsMenu button:hover { background-color: #f1f5f9 !important; }
   body.light #roomBadge { background-color: #dcfce7 !important; border-color: #86efac !important; color: #166534 !important; }
   body.light #infoStatus { color: #047857 !important; }
   body.light #boardCount,
   body.light #rosterCount { background-color: #e2e8f0 !important; color: #334155 !important; }
   body.light #wterm { background-color: #f8fafc !important; border-color: #cbd5e1 !important; }
   body.light #wterm > div:first-child { border-color: #cbd5e1 !important; color: #64748b !important; }
-  body.light #woutput { background-color: #f8fafc !important; color: #1e293b !important; }
   body.light #wterm > div:last-child { border-color: #cbd5e1 !important; }
-  body.light #wps1 { color: #047857 !important; }
-  body.light #wcmd { background-color: transparent !important; color: #0f172a !important; }
   body.light #wspace { scrollbar-color: #94a3b8 transparent; }
   body.light input::placeholder { color: #64748b !important; opacity: 1; }
-  body.light #wcmd::placeholder { color: #94a3b8 !important; }
   body.light #wrunBtn,
   body.light #qRun,
   body.light #inviteBtn,
@@ -219,6 +301,19 @@
   body.light button:focus-visible,
   body.light input:focus-visible,
   body.light select:focus-visible { outline-color: #6d28d9; }
+  /* Contraste no tema claro: cores que ficavam ilegíveis em fundo claro */
+  body.light .text-amber-300 { color: #b45309 !important; }
+  body.light .remove-student-btn { color: #dc2626 !important; }
+  body.light .bg-slate-800\/30 { background-color: #f1f5f9 !important; }
+  body.light #createClassroomBtn,
+  body.light #joinBtn,
+  body.light #inviteBtn,
+  body.light #inviteCopy { color: #fff !important; }
+  body.light .hover\:bg-slate-800:hover,
+  body.light .hover\:bg-slate-700:hover { background-color: #e2e8f0 !important; }
+  body.light .hover\:text-slate-100:hover,
+  body.light .hover\:text-slate-200:hover,
+  body.light .hover\:text-white:hover { color: #0f172a !important; }
   @media (max-width: 640px) {
     #topbar { height: auto; min-height: 4rem; flex-wrap: wrap; gap: .5rem; padding: .6rem .75rem .55rem; }
     .teacher-brand { flex: 1 1 auto; }
@@ -288,12 +383,9 @@
   body:not(.light) #infoAvatar { background: var(--studio-coral) !important; color: #25150f !important; }
   body:not(.light) #wspace { background: rgba(11, 18, 20, .72); }
   body:not(.light) #weditor,
-  body:not(.light) #focusEditor,
   body:not(.light) #boardEditor { border-color: var(--studio-line) !important; }
   body:not(.light) #wterm { border-color: var(--studio-line) !important; background: #101a1d !important; }
   body:not(.light) #wterm > div { border-color: var(--studio-line) !important; }
-  body:not(.light) #woutput { color: #bcebd9; }
-  body:not(.light) #wps1 { color: var(--studio-mint); }
   body:not(.light) #wrunBtn,
   body:not(.light) #qRun { background: var(--studio-lime) !important; color: #172018 !important; box-shadow: 0 4px 16px rgba(216, 242, 116, .1); }
   body:not(.light) #inviteToolbarBtn,
@@ -306,7 +398,6 @@
   body:not(.light) #profileMenu,
   body:not(.light) #bellPanel,
   body:not(.light) #settingsMenu,
-  body:not(.light) #wmenu,
   body:not(.light) #inviteModal > section { border-color: var(--studio-line) !important; background: var(--studio-surface) !important; }
   body:not(.light) #classroomManager { border-color: var(--studio-line); background: var(--studio-raised); }
   body:not(.light) .text-violet-300,
@@ -434,7 +525,7 @@
 
     <!-- ===== CENTRO: WORKSPACE ===== -->
     <main id="colCenter" class="flex-1 flex flex-col min-w-0 min-h-0">
-      <div class="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800 shrink-0">
+      <div id="roomHeader" class="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800 shrink-0">
         <div id="roomAvatar" class="w-10 h-10 rounded-full bg-violet-600 grid place-items-center font-bold text-lg shrink-0">R</div>
         <div class="min-w-0">
           <div class="flex items-center gap-2">
@@ -454,13 +545,8 @@
             <span class="text-[11px] font-mono px-2 py-1 rounded bg-slate-800 text-slate-300">Python ▾</span>
             <button id="wrunBtn" title="Executar (Ctrl+Enter)" class="w-7 h-7 grid place-items-center rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">▶</button>
             <button id="wfullBtn" title="Ecrã inteiro para projetar (Esc para sair)" class="w-7 h-7 grid place-items-center rounded hover:bg-slate-800 text-slate-400 text-xs">⛶</button>
-            <div class="relative">
-              <button id="wmenuBtn" class="w-7 h-7 grid place-items-center rounded hover:bg-slate-800 text-slate-400">⋯</button>
-              <div id="wmenu" class="hidden absolute right-0 mt-1 w-52 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-1.5 z-50">
-                <button id="wdlBtn" class="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-800">Descarregar workspace.py</button>
-                <button id="wcopyBtn" class="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-800">Copiar código</button>
-              </div>
-            </div>
+            <button id="wdlBtn" title="Descarregar ficheiro" aria-label="Descarregar ficheiro" class="w-7 h-7 grid place-items-center rounded hover:bg-slate-800 text-slate-400 text-xs">⤓</button>
+            <button id="wcopyBtn" title="Copiar código" aria-label="Copiar código" class="w-7 h-7 grid place-items-center rounded hover:bg-slate-800 text-slate-400 text-xs">⧉</button>
           </div>
         </div>
         <!-- editor + terminal -->
@@ -468,12 +554,8 @@
           <div id="weditor" class="overflow-hidden rounded-lg border border-slate-800"></div>
           <div id="wspaceResize" class="workspace-resize" role="separator" tabindex="0" aria-label="Redimensionar editor e terminal" aria-orientation="horizontal" aria-valuemin="120" aria-valuenow="256"></div>
           <section id="wterm" class="flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
-            <div class="shrink-0 border-b border-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300">Terminal</div>
-            <pre id="woutput" data-empty="1" class="h-28 overflow-auto px-3 py-2 text-xs text-emerald-100 font-mono">Terminal pronto. Escreve Python na linha &gt;&gt;&gt; ou prime ▶ Executar.</pre>
-            <div class="flex shrink-0 items-center gap-1.5 border-t border-slate-800 px-3 py-1.5 text-xs font-mono">
-              <span id="wps1" class="shrink-0 text-emerald-400">&gt;&gt;&gt; </span>
-              <input id="wcmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="escreve aqui… (Enter executa, ↑↓ histórico, Esc cancela)" class="min-w-0 flex-1 bg-transparent outline-none text-emerald-100 placeholder:text-slate-600" />
-            </div>
+            <div class="shrink-0 flex items-center gap-2 border-b border-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300"><span>Terminal</span><span id="wtime" class="ml-auto font-mono text-[11px] font-normal text-slate-500"></span></div>
+            <div id="terminal-container" class="flex-1 min-h-[12rem] overflow-hidden p-2"></div>
           </section>
         </div>
       </section>
@@ -534,28 +616,12 @@
           <button id="freezeBtn" class="w-full bg-violet-600 hover:bg-violet-500 rounded-lg py-2 text-xs font-semibold">Congelar turma</button>
         </div>
       </div>
-
-      <div class="card rounded-xl border border-slate-800 bg-slate-900 p-3">
-        <div class="flex items-center gap-2 mb-2">
-          <p class="menu-label">🎯 Foco</p>
-          <select id="focusSelect" class="ml-auto max-w-[110px] bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-xs outline-none"></select>
-          <button id="focusClear" title="Limpar foco" class="text-slate-500 hover:text-slate-200 text-xs">✕</button>
-        </div>
-        <div id="focusEmpty" class="rounded-lg bg-violet-600/20 border border-violet-500/30 p-3 text-xs text-slate-300 flex gap-2">
-          <span>💡</span><span>Seleciona um aluno para ver o código em direto...</span>
-        </div>
-        <div id="focusWrap" class="hidden">
-          <p class="text-sm font-semibold"><span id="focusName">—</span></p>
-          <p id="focusMeta" class="text-[11px] text-slate-500 font-mono mb-1"></p>
-          <div id="focusEditor" class="h-48 rounded-lg overflow-hidden border border-slate-800"></div>
-        </div>
-      </div>
     </aside>
   </div>
 
-  <section id="tasksView" class="hidden flex-1 min-h-0 min-w-0 overflow-auto p-4 lg:p-6" aria-labelledby="tasksHeading">
-    <div class="mx-auto grid w-full max-w-6xl content-start gap-4 xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
-      <div class="task-composer card h-fit rounded-xl border border-slate-800 bg-slate-900 p-4">
+  <section id="tasksView" class="hidden flex-1 min-h-0 min-w-0 overflow-auto pb-4 pl-1 pr-4 pt-0 lg:pb-6 lg:pl-2 lg:pr-6 lg:pt-1" aria-labelledby="tasksHeading">
+    <div class="grid w-full max-w-7xl content-start justify-start gap-6 xl:grid-cols-[minmax(24rem,38rem)_minmax(0,1fr)]">
+      <div class="task-composer card h-fit rounded-xl border border-slate-800 bg-slate-900 p-5 lg:p-6">
         <div class="mb-4 flex items-center gap-3">
           <div class="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/15 text-lg text-violet-300" aria-hidden="true">✎</div>
           <div class="min-w-0">
@@ -567,7 +633,7 @@
           <label for="taskTitle" class="text-xs font-medium text-slate-400">Título</label>
           <input id="taskTitle" maxlength="120" required placeholder="Ex.: Função para calcular médias" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500" />
           <label for="taskDescription" class="text-xs font-medium text-slate-400">Instruções</label>
-          <textarea id="taskDescription" maxlength="2000" required rows="5" placeholder="Descreve o que os alunos devem fazer..." class="w-full resize-y rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500"></textarea>
+          <textarea id="taskDescription" maxlength="2000" required rows="12" placeholder="Descreve o que os alunos devem fazer..." class="w-full resize-y rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500"></textarea>
           <label for="taskDeadline" class="text-xs font-medium text-slate-400">Prazo (opcional)</label>
           <input id="taskDeadline" type="datetime-local" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500" />
           <p class="text-xs text-slate-500">O enunciado será incluído como comentário Python (#) no editor, sem substituir o código do aluno.</p>
@@ -603,8 +669,64 @@
     </section>
   </div>
 
+  <div id="confirmModal" class="hidden fixed inset-0 z-[110] items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <section class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+      <h2 id="confirmTitle" class="font-semibold">Confirmar</h2>
+      <p id="confirmMessage" class="mt-2 text-sm leading-relaxed text-slate-400"></p>
+      <div class="mt-4 flex justify-end gap-2">
+        <button id="confirmCancel" type="button" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Cancelar</button>
+        <button id="confirmOk" type="button" class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500">Confirmar</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="taskEditModal" class="hidden fixed inset-0 z-[110] items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="editTaskHeading">
+    <section class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+      <div class="flex items-center gap-3">
+        <h2 id="editTaskHeading" class="font-semibold">Editar tarefa</h2>
+        <button id="editTaskClose" type="button" class="ml-auto rounded px-2 py-1 text-slate-400 hover:bg-slate-800" aria-label="Fechar">✕</button>
+      </div>
+      <form id="taskEditForm" class="mt-4 grid gap-3">
+        <label for="editTaskTitle" class="text-xs font-medium text-slate-400">Título</label>
+        <input id="editTaskTitle" maxlength="120" required placeholder="Ex.: Função para calcular médias" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500" />
+        <label for="editTaskDescription" class="text-xs font-medium text-slate-400">Instruções</label>
+        <textarea id="editTaskDescription" maxlength="2000" required rows="6" placeholder="Descreve o que os alunos devem fazer..." class="w-full resize-y rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500"></textarea>
+        <label for="editTaskDeadline" class="text-xs font-medium text-slate-400">Prazo (opcional)</label>
+        <input id="editTaskDeadline" type="datetime-local" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm outline-none focus:border-violet-500" />
+        <p id="editTaskFeedback" role="status" aria-live="polite" class="min-h-4 text-xs text-slate-400"></p>
+        <div class="flex justify-end gap-2">
+          <button id="editTaskCancel" type="button" class="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Cancelar</button>
+          <button id="editTaskSave" type="submit" class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500">Guardar alterações</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+<script>
+  // Pré-preenche a sala antes do teacher.js correr (síncrono, antes do
+  // primeiro paint): evita o flash da sala padrão ao recarregar noutra turma.
+  (function () {
+    var room = window._earlyTeacherRoom || 'room_12A';
+    function setText(id, text) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+    var ri = document.getElementById('roomInput');
+    if (ri) ri.value = room;
+    setText('sessRoom', room);
+    setText('roomName', room);
+    setText('infoRoom', room);
+    setText('infoName', room);
+    setText('taskRoomLabel', room);
+    setText('profileCurrentClass', room);
+    var avatar = document.getElementById('roomAvatar');
+    if (avatar) avatar.textContent = (room.trim()[0] || 'R').toUpperCase();
+    var infoAvatar = document.getElementById('infoAvatar');
+    if (infoAvatar) infoAvatar.textContent = (room.trim()[0] || 'R').toUpperCase();
+  })();
+</script>
 <script src="/js/teacher.js"></script>
 </body>
 </html>

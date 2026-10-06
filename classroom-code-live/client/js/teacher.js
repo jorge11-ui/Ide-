@@ -7,7 +7,9 @@ let teacherClassrooms = [];
 const teacherRoomStorageKey = 'ccl-teacher-current-room';
 let savedTeacherRoom = '';
 try { savedTeacherRoom = localStorage.getItem(teacherRoomStorageKey) || ''; } catch (e) {}
-roomInput.value = savedTeacherRoom || qs.get('room') || roomInput.value;
+// O HTML já pré-preencheu a sala (window._earlyTeacherRoom) antes do paint;
+// aqui só garantimos a mesma prioridade: localStorage > ?room= > DOM.
+roomInput.value = window._earlyTeacherRoom || savedTeacherRoom || qs.get('room') || roomInput.value;
 function persistTeacherRoom(room) {
   const selectedRoom = String(room || '').trim();
   if (!selectedRoom) return;
@@ -64,7 +66,6 @@ function emitSock(ev, data) { try { if (socket && socket.connected) socket.emit(
 function onSock(ev, fn) { try { if (socket) socket.on(ev, fn); } catch (e) {} }
 const students = new Map(); // studentId -> { name, language, code, online, updatedAt }
 let focusId = null;
-let focusEditor = null;
 let boardEditor = null;
 let frozen = false;
 let sessionStart = Date.now();
@@ -108,6 +109,20 @@ function setTab(name) {
     if (active) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
+  const isProjector = name === 'projetor';
+  document.body.classList.toggle('projector-mode', isProjector);
+
+  // Ajuste de fonte para o modo projetor (editor + terminal maiores).
+  try { if (typeof weditor !== 'undefined' && weditor) weditor.updateOptions({ fontSize: isProjector ? 20 : 13 }); } catch (e) {}
+  try {
+    if (typeof terminal !== 'undefined' && terminal) {
+      terminal.options.fontSize = isProjector ? 16 : 13;
+      if (typeof terminalFitAddon !== 'undefined' && terminalFitAddon) {
+        setTimeout(() => { try { terminalFitAddon.fit(); } catch (fitError) {} }, 80);
+      }
+    }
+  } catch (e) {}
+
   const isAlunos = name === 'alunos';
   document.getElementById('mainViews').classList.toggle('hidden', name === 'tarefas');
   document.getElementById('viewAlunos').style.display = isAlunos ? 'flex' : 'none';
@@ -117,9 +132,6 @@ function setTab(name) {
   const tasksView = document.getElementById('tasksView');
   tasksView.classList.toggle('hidden', name !== 'tarefas');
   tasksView.classList.toggle('flex', name === 'tarefas');
-  const fe = document.getElementById('focusEditor');
-  if (name === 'alunos') { fe.classList.remove('h-48'); fe.classList.add('h-[55vh]'); }
-  else { fe.classList.add('h-48'); fe.classList.remove('h-[55vh]'); }
   if (name === 'tarefas') {
     const t = document.getElementById('tasksView');
     t.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -127,11 +139,15 @@ function setTab(name) {
     setTimeout(() => { t.style.boxShadow = ''; }, 1200);
     setTimeout(() => { const title = document.getElementById('taskTitle'); if (title) title.focus(); }, 350);
   }
-  let _fe = null, _we = null, _be = null;
-  try { _fe = focusEditor; } catch (e) {}
+  let _we = null, _be = null;
   try { _we = weditor; } catch (e) {}
   try { _be = boardEditor; } catch (e) {}
-  setTimeout(() => { try { if (_fe) _fe.layout(); if (_we) _we.layout(); if (_be) _be.layout(); } catch (e) {} }, 60);
+  const relayout = () => {
+    try { if (_we) _we.layout(); if (_be) _be.layout(); } catch (e) {}
+    try { if (typeof terminalFitAddon !== 'undefined' && terminalFitAddon && terminal) terminalFitAddon.fit(); } catch (e) {}
+  };
+  setTimeout(relayout, 60);
+  setTimeout(relayout, 220);
   try { localStorage.setItem('ccl-teacher-tab', name); } catch (e) {}
 }
 document.querySelectorAll('.navtab').forEach(b => { b.onclick = () => setTab(b.dataset.tab); });
@@ -163,8 +179,6 @@ document.getElementById('bellBtn').onclick = (e) => {
 };
 document.addEventListener('click', (e) => {
   if (!document.getElementById('bellPanel').classList.contains('hidden') && !document.getElementById('bellPanel').contains(e.target)) document.getElementById('bellPanel').classList.add('hidden');
-  const wm = document.getElementById('wmenu');
-  if (!wm.classList.contains('hidden') && !wm.contains(e.target) && e.target.id !== 'wmenuBtn') wm.classList.add('hidden');
   const sm = document.getElementById('settingsMenu');
   if (!sm.classList.contains('hidden') && !sm.contains(e.target) && e.target.id !== 'settingsBtn') sm.classList.add('hidden');
 });
@@ -229,14 +243,36 @@ function renderTaskHistory() {
     status.className = 'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ' +
       (deliveredCount ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700 text-slate-300');
     status.textContent = deliveredCount + ' / ' + totalCount + ' entregaram';
-    heading.append(title, status);
+    const delTask = document.createElement('button');
+    delTask.type = 'button';
+    delTask.className = 'remove-student-btn';
+    delTask.textContent = 'Eliminar';
+    delTask.title = 'Eliminar esta tarefa e todas as entregas';
+    delTask.setAttribute('aria-label', 'Eliminar a tarefa ' + task.title);
+    delTask.onclick = () => deleteTask(task.id, task.title);
+    const editTaskBtn = document.createElement('button');
+    editTaskBtn.type = 'button';
+    editTaskBtn.className = 'shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700';
+    editTaskBtn.textContent = 'Editar';
+    editTaskBtn.title = 'Editar título, instruções e prazo';
+    editTaskBtn.setAttribute('aria-label', 'Editar a tarefa ' + task.title);
+    editTaskBtn.onclick = () => openTaskEditModal(task.id);
+    const dupTaskBtn = document.createElement('button');
+    dupTaskBtn.type = 'button';
+    dupTaskBtn.className = 'shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-slate-700';
+    dupTaskBtn.textContent = 'Duplicar';
+    dupTaskBtn.title = 'Carregar uma cópia no formulário para publicar de novo';
+    dupTaskBtn.setAttribute('aria-label', 'Duplicar a tarefa ' + task.title);
+    dupTaskBtn.onclick = () => duplicateTask(task.id);
+    heading.append(title, status, editTaskBtn, dupTaskBtn, delTask);
     const description = document.createElement('p');
     description.className = 'mt-1 whitespace-pre-wrap break-words text-xs text-slate-400';
     description.textContent = task.description;
     const when = document.createElement('p');
     when.className = 'mt-2 text-[10px] text-slate-500';
     when.textContent = 'Publicada em ' + new Date(task.createdAt).toLocaleString() +
-      (task.deadlineAt ? ' • Prazo: ' + new Date(task.deadlineAt).toLocaleString() : '');
+      (task.deadlineAt ? ' • Prazo: ' + new Date(task.deadlineAt).toLocaleString() : '') +
+      (task.editedAt ? ' • Editada em ' + new Date(task.editedAt).toLocaleString() : '');
     const deliveryList = document.createElement('div');
     deliveryList.className = 'task-submissions mt-3 space-y-2';
     const sectionTitle = document.createElement('h5');
@@ -371,6 +407,113 @@ function handlePublishedTask(task) {
   document.getElementById('taskForm').reset();
   if (existingIndex < 0) logEvent('Tarefa publicada: ' + task.title);
 }
+async function deleteTask(taskId, title) {
+  const confirmed = await teacherConfirm({
+    title: 'Eliminar tarefa',
+    message: 'Eliminar a tarefa "' + title + '"? Todas as entregas e feedbacks serão apagados permanentemente.',
+    okLabel: 'Eliminar',
+    danger: true
+  });
+  if (!confirmed) return;
+  if (!socket || !socket.connected) {
+    logEvent('Sem ligação ao servidor — a tarefa não foi eliminada.');
+    return;
+  }
+  socket.emit('delete_task', { roomId: roomInput.value, taskId });
+}
+function handleDeletedTask({ taskId } = {}) {
+  if (typeof taskId !== 'string') return;
+  const index = taskHistory.findIndex(entry => entry.id === taskId);
+  if (index < 0) return;
+  const removed = taskHistory[index];
+  taskHistory.splice(index, 1);
+  saveTaskHistory();
+  renderTaskHistory();
+  logEvent('Tarefa eliminada: ' + (removed ? removed.title : taskId));
+}
+function toLocalDateTimeInput(timestamp) {
+  if (!Number.isFinite(timestamp)) return '';
+  try { return new Date(timestamp - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+  catch (error) { return ''; }
+}
+let editingTaskId = null;
+function openTaskEditModal(taskId) {
+  const task = taskHistory.find(entry => entry.id === taskId);
+  if (!task) return;
+  editingTaskId = taskId;
+  document.getElementById('editTaskTitle').value = task.title;
+  document.getElementById('editTaskDescription').value = task.description;
+  document.getElementById('editTaskDeadline').value = task.deadlineAt ? toLocalDateTimeInput(task.deadlineAt) : '';
+  document.getElementById('editTaskFeedback').textContent = '';
+  const save = document.getElementById('editTaskSave');
+  save.disabled = false;
+  save.textContent = 'Guardar alterações';
+  const modal = document.getElementById('taskEditModal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  setTimeout(() => { try { document.getElementById('editTaskTitle').focus(); } catch (e) {} }, 50);
+}
+function closeTaskEditModal() {
+  editingTaskId = null;
+  const modal = document.getElementById('taskEditModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+function duplicateTask(taskId) {
+  const task = taskHistory.find(entry => entry.id === taskId);
+  if (!task) return;
+  document.getElementById('taskTitle').value = task.title + ' (cópia)';
+  document.getElementById('taskDescription').value = task.description;
+  document.getElementById('taskDeadline').value = task.deadlineAt ? toLocalDateTimeInput(task.deadlineAt) : '';
+  document.getElementById('taskFeedback').textContent = 'Cópia carregada — revê e prime Publicar tarefa.';
+  const composer = document.querySelector('#tasksView .task-composer');
+  if (composer) composer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => { const title = document.getElementById('taskTitle'); if (title) title.focus(); }, 350);
+}
+function handleEditedTask(task) {
+  if (!task || task.roomId !== roomInput.value || typeof task.id !== 'string') return;
+  const index = taskHistory.findIndex(entry => entry.id === task.id);
+  if (index < 0) return;
+  taskHistory[index] = {
+    ...taskHistory[index], ...task,
+    submissions: Array.isArray(task.submissions) ? task.submissions : (taskHistory[index].submissions || [])
+  };
+  saveTaskHistory();
+  renderTaskHistory();
+  if (editingTaskId === task.id) closeTaskEditModal();
+  logEvent('Tarefa atualizada: ' + task.title);
+}
+document.getElementById('taskEditForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!editingTaskId) return;
+  const title = document.getElementById('editTaskTitle').value.trim();
+  const description = document.getElementById('editTaskDescription').value.trim();
+  const deadlineValue = document.getElementById('editTaskDeadline').value;
+  if (!title || !description) {
+    document.getElementById('editTaskFeedback').textContent = 'Preenche o título e as instruções da tarefa.';
+    return;
+  }
+  if (!socket || !socket.connected) {
+    document.getElementById('editTaskFeedback').textContent = 'Sem ligação ao servidor. As alterações não foram enviadas.';
+    return;
+  }
+  const save = document.getElementById('editTaskSave');
+  save.disabled = true;
+  save.textContent = 'A guardar…';
+  socket.emit('edit_task', {
+    roomId: roomInput.value, taskId: editingTaskId, title, description,
+    deadlineAt: deadlineValue ? new Date(deadlineValue).getTime() : null
+  });
+});
+document.getElementById('editTaskCancel').onclick = closeTaskEditModal;
+document.getElementById('editTaskClose').onclick = closeTaskEditModal;
+document.getElementById('taskEditModal').addEventListener('click', event => {
+  if (event.target.id === 'taskEditModal') closeTaskEditModal();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && editingTaskId &&
+      !document.getElementById('taskEditModal').classList.contains('hidden')) closeTaskEditModal();
+});
 function handleTaskSubmission({ taskId, submission } = {}) {
   const task = taskHistory.find(entry => entry.id === taskId);
   if (!task || !submission || typeof submission.id !== 'string') return;
@@ -413,6 +556,17 @@ document.getElementById('taskForm').addEventListener('submit', (event) => {
 });
 onSock('teacher_task', handlePublishedTask);
 onSock('class_tasks', handleClassTasks);
+onSock('task_deleted', handleDeletedTask);
+onSock('task_edited', handleEditedTask);
+onSock('task_edit_error', ({ message } = {}) => {
+  const feedback = document.getElementById('editTaskFeedback');
+  if (feedback) feedback.textContent = message || 'Não foi possível guardar as alterações.';
+  const save = document.getElementById('editTaskSave');
+  if (save) { save.disabled = false; save.textContent = 'Guardar alterações'; }
+});
+onSock('task_delete_error', ({ message } = {}) => {
+  if (message) logEvent(message);
+});
 onSock('task_submission', handleTaskSubmission);
 onSock('feedback_saved', handleFeedbackSaved);
 onSock('feedback_error', ({ submissionId, message } = {}) => {
@@ -593,6 +747,43 @@ function closeInviteModal() {
   modal.classList.add('hidden');
   modal.classList.remove('flex');
 }
+// Confirmação dentro da página (não usa o confirm() nativo, que o browser
+// pode bloquear se o utilizador desativou os diálogos do site).
+let confirmResolver = null;
+function teacherConfirm({ title, message, okLabel, danger } = {}) {
+  if (confirmResolver) { confirmResolver(false); confirmResolver = null; }
+  const modal = document.getElementById('confirmModal');
+  document.getElementById('confirmTitle').textContent = title || 'Confirmar';
+  document.getElementById('confirmMessage').textContent = message || '';
+  const okBtn = document.getElementById('confirmOk');
+  okBtn.textContent = okLabel || 'Confirmar';
+  okBtn.className = danger
+    ? 'rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500'
+    : 'rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  setTimeout(() => { try { document.getElementById('confirmCancel').focus(); } catch (e) {} }, 50);
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+  });
+}
+function settleConfirm(value) {
+  if (!confirmResolver) return;
+  const resolve = confirmResolver;
+  confirmResolver = null;
+  const modal = document.getElementById('confirmModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+  resolve(value);
+}
+document.getElementById('confirmOk').onclick = () => settleConfirm(true);
+document.getElementById('confirmCancel').onclick = () => settleConfirm(false);
+document.getElementById('confirmModal').addEventListener('click', event => {
+  if (event.target.id === 'confirmModal') settleConfirm(false);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && confirmResolver) settleConfirm(false);
+});
 document.getElementById('inviteBtn').onclick = openInviteModal;
 document.getElementById('inviteToolbarBtn').onclick = openInviteModal;
 document.getElementById('inviteClose').onclick = closeInviteModal;
@@ -620,7 +811,10 @@ document.getElementById('presentationBtn').onclick = () => {
   document.body.classList.toggle('presentation-mode', enabled);
   document.getElementById('presentationBtn').textContent = enabled ? 'Sair da apresentação' : 'Apresentar';
   if (enabled) setTab('projetor');
-  if (weditor) setTimeout(() => weditor.layout(), 80);
+  setTimeout(() => {
+    try { if (weditor) weditor.layout(); } catch (e) {}
+    try { fitTeacherTerminal(); } catch (e) {}
+  }, 80);
 };
 function downloadJson(data, fileName) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -805,10 +999,16 @@ function formatAttendance(timestamp) {
 
 // ================= render =================
 const list = document.getElementById('studentList');
-function removeStudent(studentId) {
+async function removeStudent(studentId) {
   const student = students.get(studentId);
   if (!student) return;
-  if (!confirm('Eliminar ' + student.name + ' desta turma? O código guardado no servidor e todas as entregas e feedbacks serão apagados permanentemente. A cópia local no dispositivo do aluno não será apagada.')) return;
+  const confirmed = await teacherConfirm({
+    title: 'Eliminar aluno',
+    message: 'Eliminar ' + student.name + ' desta turma? O código guardado no servidor e todas as entregas e feedbacks serão apagados permanentemente. A cópia local no dispositivo do aluno não será apagada.',
+    okLabel: 'Eliminar',
+    danger: true
+  });
+  if (!confirmed) return;
   if (!socket || !socket.connected) {
     logEvent('Sem ligação ao servidor — o aluno não foi eliminado.');
     return;
@@ -861,10 +1061,11 @@ function render() {
   bg.innerHTML = '';
   entries.forEach(([id, s]) => {
     if (!s.name.toLowerCase().includes(qb)) return;
-    const cardWrap = document.createElement('div');
-    cardWrap.className = 'min-w-0';
-    const card = document.createElement('button');
-    card.className = 'text-left rounded-xl overflow-hidden border transition ' + (id === focusId ? 'bg-slate-900 border-violet-500' : 'bg-slate-900 border-slate-800 hover:border-violet-500');
+    const card = document.createElement('div');
+    card.className = 'min-w-0 text-left rounded-xl overflow-hidden border transition cursor-pointer ' + (id === focusId ? 'bg-slate-900 border-violet-500' : 'bg-slate-900 border-slate-800 hover:border-violet-500');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', 'Ver código de ' + s.name);
     card.innerHTML =
       '<div class="flex items-center gap-2 px-3 py-2 border-b border-slate-800">' +
         '<span class="w-8 h-8 rounded-full grid place-items-center text-xs font-bold shrink-0" style="background:' + avColor(id) + '">' + escapeHtml((s.name.trim()[0] || 'A').toUpperCase()) + '</span>' +
@@ -877,16 +1078,19 @@ function render() {
       '<div class="px-3 py-1.5 text-[11px] text-slate-500 border-t border-slate-800">' +
       escapeHtml(progressLabel(s.progressStatus)) + ' • Entrou ' + escapeHtml(formatAttendance(s.joinedAt)) +
       ' • Última atividade ' + escapeHtml(formatAttendance(s.lastSeenAt)) + ' • ' + (s.code || '').length + ' chars</div>';
-    card.onclick = () => {
+    const openFocus = () => {
       focusId = id;
       document.getElementById('boardFocus').classList.remove('hidden');
       render();
       document.getElementById('boardFocus').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
+    card.onclick = openFocus;
+    card.onkeydown = (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openFocus(); }
+    };
     const remove = createRemoveStudentButton(id, s);
-    remove.classList.add('mt-1', 'ml-auto', 'block');
-    cardWrap.append(card, remove);
-    bg.appendChild(cardWrap);
+    card.querySelector('div').appendChild(remove);
+    bg.appendChild(card);
   });
   if (students.size === 0) bg.innerHTML = '<p class="text-sm text-slate-500 col-span-full">Nenhum aluno ainda. Partilha o link com a turma.</p>';
   document.getElementById('boardCount').textContent = students.size + (students.size === 1 ? ' aluno' : ' alunos');
@@ -894,15 +1098,8 @@ function render() {
   document.getElementById('rosterCount').textContent = students.size;
   document.getElementById('sessCount').textContent = onlineCount + (onlineCount === 1 ? ' aluno conectado' : ' alunos conectados');
   document.getElementById('infoTotal').textContent = students.size;
-  // seletor de foco
-  const sel = document.getElementById('focusSelect');
-  sel.innerHTML = '<option value="">—</option>' + entries.map(([id, s]) => '<option value="' + escapeHtml(id) + '"' + (id === focusId ? ' selected' : '') + '>' + escapeHtml(s.name) + '</option>').join('');
-  // cartão de foco + info
+  // cartão de info (lateral)
   const f = students.get(focusId);
-  document.getElementById('focusEmpty').classList.toggle('hidden', !!f);
-  document.getElementById('focusWrap').classList.toggle('hidden', !f);
-  document.getElementById('focusName').textContent = f ? f.name : '—';
-  document.getElementById('focusMeta').textContent = f ? (f.language + ' • ' + f.code.length + ' chars' + (f.online === false ? ' • OFFLINE' : '')) : '';
   const av = document.getElementById('infoAvatar');
   av.textContent = f ? (f.name.trim()[0] || 'A').toUpperCase() : (roomInput.value.trim()[0] || 'R').toUpperCase();
   av.style.background = f ? avColor(focusId) : '#7c3aed';
@@ -910,10 +1107,6 @@ function render() {
   const st = document.getElementById('infoStatus');
   st.textContent = f ? (f.online === false ? '○ Offline' : '● Online') : '● Online';
   st.className = 'text-[11px] ' + ((f && f.online === false) ? 'text-slate-500' : 'text-emerald-300');
-  if (focusEditor && f) {
-    if (focusEditor.getValue() !== f.code) focusEditor.setValue(f.code);
-    if (window.monaco) monaco.editor.setModelLanguage(focusEditor.getModel(), f.language || 'python');
-  }
   // foco do board (vista Alunos)
   document.getElementById('boardFocusName').textContent = f ? f.name : '—';
   document.getElementById('boardFocusMeta').textContent = f ? (f.language + ' • ' + f.code.length + ' chars' + (f.online === false ? ' • OFFLINE' : '')) : '';
@@ -926,8 +1119,6 @@ function render() {
 document.getElementById('search').oninput = render;
 document.getElementById('searchBoard').oninput = render;
 document.getElementById('boardFocusClose').onclick = () => document.getElementById('boardFocus').classList.add('hidden');
-document.getElementById('focusSelect').onchange = (e) => { focusId = e.target.value || null; render(); };
-document.getElementById('focusClear').onclick = () => { focusId = null; render(); };
 // Mostra o último roster guardado neste PC (inclui offline) até chegar o estado live
 try {
   const cached = JSON.parse(localStorage.getItem('ccl-roster:' + roomInput.value) || '[]');
@@ -1031,7 +1222,7 @@ function renderWorkspaceFiles() {
   });
   const active = getActiveWorkspaceFile();
   if (active) {
-    document.getElementById('wdlBtn').textContent = 'Descarregar ' + active.name;
+    document.getElementById('wdlBtn').title = 'Descarregar ' + active.name;
     document.getElementById('wnewBtn').title = 'Criar um ficheiro vazio';
   }
 }
@@ -1080,6 +1271,14 @@ function renameWorkspaceFile(fileId) {
   renderWorkspaceFiles();
   saveWorkspaceForRoom(roomInput.value);
 }
+function downloadWorkspaceFile(file) {
+  if (!file) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([file.code || ''], { type: 'text/x-python;charset=utf-8' }));
+  a.download = file.name || 'workspace.py';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 function closeWorkspaceFile(fileId) {
   if (workspaceFiles.length < 2) return;
   const index = workspaceFiles.findIndex(file => file.id === fileId);
@@ -1093,29 +1292,184 @@ function closeWorkspaceFile(fileId) {
   if (fileId === activeWorkspaceFileId) {
     const next = workspaceFiles[Math.min(index, workspaceFiles.length - 1)];
     activeWorkspaceFileId = next.id;
-    weditor.setValue(next.code);
-  }
-  function downloadWorkspaceFile(file) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([file.code], { type: 'text/x-python;charset=utf-8' }));
-    a.download = file.name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    try { weditor.setValue(next.code); } catch (e) {}
   }
   renderWorkspaceFiles();
   saveWorkspaceForRoom(roomInput.value);
 }
 const wgetPy = () => { if (!wpy) wpy = loadPyodide(); return wpy; };
-function termPrint(line) {
-  const out = document.getElementById('woutput');
-  if (out.dataset.empty === '1') { out.textContent = ''; out.dataset.empty = ''; }
-  out.textContent += line + '\n';
-  out.scrollTop = out.scrollHeight;
+let terminal = null;
+let terminalFitAddon = null;
+let pendingConsoleInput = null;
+let terminalCommandBuffer = '';
+let terminalInputBuffer = '';
+let wbusy = false;
+
+function fitTeacherTerminal() {
+  try { if (terminal && terminalFitAddon) terminalFitAddon.fit(); } catch (e) {}
+}
+
+function setWtime(text) {
+  const el = document.getElementById('wtime');
+  if (el) el.textContent = text;
+}
+
+function initTeacherTerminal() {
+  if (terminal) return;
+  const container = document.getElementById('terminal-container');
+  if (!container || typeof Terminal === 'undefined') return;
+  const isProjector = document.body.classList.contains('projector-mode');
+  terminal = new Terminal({
+    cursorBlink: true,
+    convertEol: true,
+    scrollback: 2000,
+    fontFamily: 'ui-monospace, Consolas, monospace',
+    fontSize: isProjector ? 16 : 13,
+    theme: {
+      background: '#012456',
+      foreground: '#f2f2f2',
+      cursor: '#7dd3fc',
+      selectionBackground: '#1b4e85'
+    }
+  });
+  try {
+    if (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) {
+      terminalFitAddon = new FitAddon.FitAddon();
+      terminal.loadAddon(terminalFitAddon);
+    }
+  } catch (e) { terminalFitAddon = null; }
+  terminal.open(container);
+  window._terminal = terminal;
+  window._terminalFitAddon = terminalFitAddon;
+
+  terminal.onData(data => {
+    const input = String(data || '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+    for (const character of input) {
+      if (pendingConsoleInput) {
+        if (character === '\x03') {
+          cancelConsoleInput();
+          terminal.write('^C\r\nPS C:\\classroom> ');
+          return;
+        }
+        if (character === '\r' || character === '\n') {
+          terminal.write('\r\n');
+          submitPendingConsoleInput(terminalInputBuffer);
+          return;
+        }
+        if (character === '\x7f') {
+          if (terminalInputBuffer) {
+            terminalInputBuffer = terminalInputBuffer.slice(0, -1);
+            terminal.write('\b \b');
+          }
+        } else if (character >= ' ' && character !== '\x7f') {
+          terminalInputBuffer += character;
+          terminal.write(character);
+        }
+        continue;
+      }
+      if (wbusy) return;
+      if (character === '\r' || character === '\n') {
+        terminal.write('\r\n');
+        submitTeacherTerminalCommand();
+        return;
+      }
+      if (character === '\x7f') {
+        if (terminalCommandBuffer) {
+          terminalCommandBuffer = terminalCommandBuffer.slice(0, -1);
+          terminal.write('\b \b');
+        }
+      } else if (character === '\x03') {
+        terminalCommandBuffer = '';
+        terminal.write('^C\r\nPS C:\\classroom> ');
+      } else if (character >= ' ' && character !== '\x7f') {
+        terminalCommandBuffer += character;
+        terminal.write(character);
+      }
+    }
+  });
+  termReset();
+  fitTeacherTerminal();
+  try {
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => fitTeacherTerminal()).observe(container);
+    }
+  } catch (e) {}
+  window.addEventListener('resize', fitTeacherTerminal);
+}
+
+function submitTeacherTerminalCommand() {
+  const command = terminalCommandBuffer.trim();
+  terminalCommandBuffer = '';
+  if (!command) {
+    terminal.write('PS C:\\classroom> ');
+  } else if (/^(clear|cls)$/i.test(command)) {
+    termReset();
+  } else if (/^help$/i.test(command)) {
+    terminal.writeln('Comandos: python <ficheiro.py>, clear, help');
+    terminal.write('PS C:\\classroom> ');
+  } else if (/^py(thon)?\s+(.+)$/i.test(command)) {
+    const match = command.match(/^py(thon)?\s+(.+)$/i);
+    const fileName = (match[2] || '').trim().replace(/^["']|["']$/g, '');
+    const file = workspaceFiles.find(entry => entry.name === fileName) ||
+      workspaceFiles.find(entry => entry.name.toLowerCase() === fileName.toLowerCase());
+    if (file) runWorkspaceFile(file);
+    else {
+      terminal.writeln('\x1b[31mFicheiro não encontrado: ' + fileName + '\x1b[0m');
+      terminal.write('PS C:\\classroom> ');
+    }
+  } else if (/^py(thon)?\s*$/i.test(command) || /^python\s+workspace\.py$/i.test(command)) {
+    runWorkspaceFile();
+  } else {
+    terminal.write('\x1b[31mComando não reconhecido. Usa "python <ficheiro.py>" ou "help".\x1b[0m\r\nPS C:\\classroom> ');
+  }
+}
+
+function submitPendingConsoleInput(value) {
+  if (!pendingConsoleInput) return;
+  const pending = pendingConsoleInput;
+  pending.answers.push(value);
+  pendingConsoleInput = null;
+  terminalInputBuffer = '';
+  executeTeacherPython(pending.code, pending.answers, true, pending.printedLogCount, (pending.prompt || '') + value, pending.fileName);
+}
+
+function showTeacherConsoleInput(prompt) {
+  terminalInputBuffer = '';
+  if (prompt) terminal.write(prompt);
+  try { terminal.focus(); } catch (e) {}
+}
+
+function cancelConsoleInput() {
+  pendingConsoleInput = null;
+  terminalInputBuffer = '';
+  wbusy = false;
+  setWtime('');
+  const runBtn = document.getElementById('wrunBtn');
+  if (runBtn) { runBtn.disabled = false; }
+}
+
+function termPrint(lines, isErr = false) {
+  if (!terminal || lines === undefined || lines === null) return;
+  if (Array.isArray(lines)) {
+    if (!lines.length) {
+      terminal.writeln('(sem output — o programa correu sem print)');
+      return;
+    }
+    const colorStart = isErr ? '\x1b[31m' : '';
+    const colorEnd = isErr ? '\x1b[0m' : '';
+    terminal.write(lines.map(line => colorStart + String(line) + colorEnd).join('\r\n') + '\r\n');
+  } else {
+    if (isErr) terminal.writeln('\x1b[31m' + lines + '\x1b[0m');
+    else terminal.writeln(lines);
+  }
 }
 function termReset() {
-  const out = document.getElementById('woutput');
-  out.dataset.empty = '1';
-  out.textContent = 'Terminal pronto. Prime ▶ Executar (usa input() à vontade — vai pedir os valores).';
+  terminalCommandBuffer = '';
+  terminalInputBuffer = '';
+  if (terminal) {
+    try { terminal.clear(); } catch (e) {}
+    terminal.write('PS C:\\classroom> ');
+  }
 }
 const wspaceResize = document.getElementById('wspaceResize');
 const wcols = document.getElementById('wcols');
@@ -1185,6 +1539,21 @@ wspaceResize.addEventListener('keydown', (event) => {
   setWorkspaceEditorExtent(current + (increase ? 16 : -16), true);
 });
 window.addEventListener('resize', () => {
+  if (document.body.classList.contains('projector-mode')) {
+    try { if (weditor) weditor.layout(); } catch (e) {}
+    fitTeacherTerminal();
+    return;
+  }
+  // Sem altura guardada/ajustada, editor e terminal dividem 50/50 via flex:
+  // basta refazer o layout, sem fixar px (senão o 50/50 virava altura fixa).
+  const hasCustomHeight = (wcols.style.getPropertyValue('--weditor-height') || '').trim() !== '';
+  let hasSavedHeight = false;
+  try { hasSavedHeight = Number(localStorage.getItem('ccl-teacher-editor-height')) >= 120; } catch (e) {}
+  if (!hasCustomHeight && !hasSavedHeight && !isWorkspaceFullscreen()) {
+    try { if (weditor) weditor.layout(); } catch (e) {}
+    fitTeacherTerminal();
+    return;
+  }
   if (isWorkspaceFullscreen()) setWorkspaceEditorExtent(weditorElement.getBoundingClientRect().width, false);
   else setWorkspaceEditorExtent(weditorElement.getBoundingClientRect().height, false);
 });
@@ -1192,148 +1561,98 @@ document.getElementById('qClear').onclick = termReset;
 function runWorkspace() { document.getElementById('wrunBtn').click(); }
 document.getElementById('qRun').onclick = runWorkspace;
 document.getElementById('qFull').onclick = () => document.getElementById('wfullBtn').click();
-// ---- motor do terminal: REPL persistente + respostas a input() ----
-// instalador de helpers Python (_wcheck: bloco incompleto? _wrun: corre c/ eco)
-const WRUN_SRC = [
-  'def _wrun(src):',
-  '    import ast, traceback',
-  '    try:',
-  '        tree = ast.parse(src, mode="single")',
-  '    except SyntaxError as e:',
-  '        print("  File \\"<terminal>\\", line " + str(e.lineno or 1))',
-  '        print("    " + (e.text or "").strip())',
-  '        print(type(e).__name__ + ": " + e.msg)',
-  '        return',
-  '    if len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr):',
-  '        try:',
-  '            _v = eval(compile(ast.Expression(tree.body[0].value), "<terminal>", "eval"), globals())',
-  '        except SystemExit:',
-  '            return',
-  '        except BaseException:',
-  '            traceback.print_exc()',
-  '            return',
-  '        if _v is not None:',
-  '            print(repr(_v))',
-  '        return',
-  '    try:',
-  '        exec(compile(tree, "<terminal>", "single"), globals())',
-  '    except SystemExit:',
-  '        pass',
-  '    except BaseException:',
-  '        traceback.print_exc()',
-  ''
-].join('\n');
-let wbusy = false;
-let answerMode = null; // { prompts:[], answers:[], index }
-let replBuf = '';
-let cmdHist = [];
-let histIdx = -1;
-function setPs1(t) { document.getElementById('wps1').textContent = t; }
-async function ensurePyConsole() {
+// ---- motor Python da professora (igual ao do aluno): corre no browser, input() no terminal ----
+async function runTeacherPython(code, answers) {
   const py = await wgetPy();
-  if (!py.globals.get('_wrepl_ready')) {
-    py.runPython('import codeop\ndef _wcheck(src):\n    try:\n        return "ok" if codeop.compile_command(src, "<term>", "single") else "more"\n    except (SyntaxError, OverflowError, ValueError):\n        return "bad"\n' + WRUN_SRC);
-    py.globals.set('_wrepl_ready', true);
-  }
-  return py;
+  const logs = [];
+  py.setStdout({ batched: (s) => logs.push(s) });
+  py.setStderr({ batched: (s) => logs.push('[erro] ' + s) });
+  const wrapper = [
+    'import json as _ccl_json',
+    '_ccl_answers = ' + JSON.stringify(answers || []),
+    'class _CCLNeedInput(BaseException): pass',
+    'def _ccl_input(prompt=""):',
+    '    if not _ccl_answers: raise _CCLNeedInput(str(prompt))',
+    '    answer = _ccl_answers.pop(0)',
+    '    print(str(prompt) + answer)',
+    '    return answer',
+    "_ccl_namespace = {'__name__': '__main__', 'input': _ccl_input}",
+    'try:',
+    '    exec(compile(' + JSON.stringify(code) + ', "<teacher>", "exec"), _ccl_namespace, _ccl_namespace)',
+    'except _CCLNeedInput as _ccl_error:',
+    '    _ccl_result = {"waiting": True, "prompt": str(_ccl_error)}',
+    'else:',
+    '    _ccl_result = {"waiting": False}',
+    '_ccl_json.dumps(_ccl_result)'
+  ].join('\n');
+  const result = await py.runPythonAsync(wrapper);
+  return { ...JSON.parse(result), logs };
 }
-async function runFileWithAnswers(answers, sourceCode, fileName) {
+
+async function executeTeacherPython(code, answers, commandAlreadyWritten, printedLogCount, echoedInput, fileName) {
   const t0 = performance.now();
+  const label = fileName || (getActiveWorkspaceFile() && getActiveWorkspaceFile().name) || 'workspace.py';
+  let waitingForInput = false;
   wbusy = true;
-  termPrint('$ python ' + fileName);
+  setWtime('a correr…');
+  const runBtn = document.getElementById('wrunBtn');
+  if (runBtn) runBtn.disabled = true;
   try {
-    const py = await ensurePyConsole();
-    const logs = [];
-    py.setStdout({ batched: (s) => logs.push(s) });
-    py.setStderr({ batched: (s) => logs.push('[erro] ' + s) });
-    let code = sourceCode;
-    if (answers) {
-      code = '_RESPOSTAS = ' + JSON.stringify(answers) + '\n' +
-        'def input(prompt=""):\n    _a = _RESPOSTAS.pop(0) if _RESPOSTAS else ""\n    print(str(prompt) + str(_a))\n    return _a\n' + code;
+    if (!terminal) return;
+    if (!commandAlreadyWritten && !(answers && answers.length)) terminal.write('$ python ' + label + '\r\n');
+    const result = await runTeacherPython(code, answers || []);
+    const newLogs = result.logs.slice(printedLogCount || 0);
+    if (echoedInput) {
+      const echoedLogIndex = newLogs.findIndex(line => String(line).replace(/\r?\n$/, '') === echoedInput);
+      if (echoedLogIndex >= 0) newLogs.splice(echoedLogIndex, 1);
     }
-    await py.runPythonAsync(code);
-    if (logs.length) logs.forEach((l) => termPrint(l));
-    else termPrint('(sem output)');
-    termPrint('[fim — ' + Math.round(performance.now() - t0) + 'ms]');
-    saveWorkspaceForRoom(roomInput.value);
-  } catch (err) { termPrint('⛔ ' + String((err && err.message) || err)); }
-  document.getElementById('wtime').textContent = Math.round(performance.now() - t0) + 'ms';
-  wbusy = false;
-  document.getElementById('wcmd').focus();
-}
-function answerNext(line) {
-  const cur = answerMode.prompts[answerMode.index];
-  termPrint(cur + line);
-  answerMode.answers.push(line);
-  answerMode.index++;
-  if (answerMode.index < answerMode.prompts.length) {
-    setPs1(answerMode.prompts[answerMode.index]);
-  } else {
-    const answers = answerMode.answers;
-    const sourceCode = answerMode.code;
-    const fileName = answerMode.fileName;
-    answerMode = null;
-    setPs1('>>> ');
-    runFileWithAnswers(answers, sourceCode, fileName);
+    if (result.waiting) {
+      pendingConsoleInput = { code, answers: answers || [], printedLogCount: result.logs.length, prompt: result.prompt, fileName: label };
+      if (newLogs.length) termPrint(newLogs, false);
+      showTeacherConsoleInput(result.prompt);
+      setWtime('a pedir input…');
+      waitingForInput = true;
+      return;
+    }
+    pendingConsoleInput = null;
+    if (newLogs.length) termPrint(newLogs, false);
+    else if (!result.logs.length && !(printedLogCount || 0)) termPrint([]);
+    terminal.write('PS C:\\classroom> ');
+    setWtime(Math.round(performance.now() - t0) + 'ms');
+    try { saveWorkspaceForRoom(roomInput.value); } catch (e) {}
+  } catch (err) {
+    pendingConsoleInput = null;
+    termPrint(['⛔ ' + String((err && err.message) || err)], true);
+    if (terminal) terminal.write('PS C:\\classroom> ');
+    setWtime('');
+  } finally {
+    wbusy = false;
+    if (!waitingForInput && runBtn) runBtn.disabled = false;
   }
 }
-async function replSubmit(line) {
-  const input = document.getElementById('wcmd');
-  input.value = '';
-  if (wbusy) return;
-  if (answerMode) { answerNext(line); return; }
-  termPrint('>>> ' + line);
-  if (!line.trim()) return;
-  if (line.trim() === 'clear' || line.trim() === 'cls') { termReset(); return; }
-  cmdHist.push(line);
-  histIdx = cmdHist.length;
-  wbusy = true;
-  try {
-    const py = await ensurePyConsole();
-    const logs = [];
-    py.setStdout({ batched: (s) => logs.push(s) });
-    py.setStderr({ batched: (s) => logs.push(s) });
-    replBuf += (replBuf ? '\n' : '') + line;
-    const st = py.globals.get('_wcheck')(replBuf);
-    if (st === 'more') { setPs1('... '); }
-    else {
-      setPs1('>>> ');
-      py.globals.get('_wrun')(replBuf);
-      if (logs.length) logs.forEach((l) => termPrint(l));
-      replBuf = '';
-    }
-  } catch (err) { termPrint('⛔ ' + String((err && err.message) || err)); replBuf = ''; setPs1('>>> '); }
-  wbusy = false;
-  input.focus();
-}
-document.getElementById('wcmd').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); replSubmit(document.getElementById('wcmd').value); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); if (cmdHist.length) { histIdx = Math.max(0, histIdx - 1); document.getElementById('wcmd').value = cmdHist[histIdx] || ''; } }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); if (cmdHist.length) { histIdx = Math.min(cmdHist.length, histIdx + 1); document.getElementById('wcmd').value = cmdHist[histIdx] || ''; } }
-  else if (e.key === 'Escape' && answerMode) { answerMode = null; setPs1('>>> '); termPrint('[cancelado]'); }
-});
-document.getElementById('wrunBtn').onclick = async () => {
-  if (!weditor || wbusy) return;
-  if (answerMode) { termPrint('[termina as respostas primeiro — Esc cancela]'); return; }
-  const code = weditor.getValue();
-  const activeFile = getActiveWorkspaceFile();
-  if (!activeFile) return;
-  activeFile.code = code;
-  saveWorkspaceForRoom(roomInput.value);
-  // input(): em vez de popups, pede os valores na linha de comandos
-  const prompts = [...code.matchAll(/input\s*\(\s*(?:(['"])(.*?)\1\s*)?\)/g)].map(m => m[2] || '');
-  if (prompts.length) {
-    answerMode = { prompts, answers: [], index: 0, code, fileName: activeFile.name };
-    setPs1(prompts[0]);
-    termPrint('$ python ' + activeFile.name);
-    termPrint('[o programa precisa de ' + prompts.length + ' valor(es) — escreve na linha abaixo]');
-    document.getElementById('wcmd').focus();
+
+function runWorkspaceFile(fileOverride) {
+  if (!weditor || wbusy || pendingConsoleInput) {
+    if (pendingConsoleInput) termPrint('[termina a resposta ao input() primeiro — Ctrl+C cancela]');
     return;
   }
-  runFileWithAnswers(null, code, activeFile.name);
-};
+  const activeFile = fileOverride || getActiveWorkspaceFile();
+  if (!activeFile) return;
+  activeFile.code = weditor.getValue();
+  try { saveWorkspaceForRoom(roomInput.value); } catch (e) {}
+  executeTeacherPython(activeFile.code, [], false, 0, '', activeFile.name);
+  try { if (terminal) terminal.focus(); } catch (e) {}
+}
+
+document.getElementById('wrunBtn').onclick = () => runWorkspaceFile();
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && pendingConsoleInput) {
+    termPrint('[cancelado]');
+    cancelConsoleInput();
+    if (terminal) terminal.write('PS C:\\classroom> ');
+  }
+});
 document.getElementById('wnewBtn').onclick = createWorkspaceFile;
-document.getElementById('wmenuBtn').onclick = (e) => { e.stopPropagation(); document.getElementById('wmenu').classList.toggle('hidden'); };
 document.getElementById('wdlBtn').onclick = () => {
   if (!weditor) return;
   const activeFile = getActiveWorkspaceFile();
@@ -1355,7 +1674,6 @@ document.getElementById('wfullBtn').onclick = async () => {
   } catch (e) {}
 };
 document.addEventListener('fullscreenchange', () => {
-  const on = !!document.fullscreenElement;
   const workspaceFullscreen = isWorkspaceFullscreen();
   wspaceResize.setAttribute('aria-orientation', workspaceFullscreen ? 'vertical' : 'horizontal');
   wspaceResize.setAttribute('aria-label', workspaceFullscreen ? 'Redimensionar editor e painel de tarefas lado a lado' : 'Redimensionar editor e painel de tarefas');
@@ -1365,19 +1683,32 @@ document.addEventListener('fullscreenchange', () => {
       if (Number.isFinite(savedWidth) && savedWidth > 0) setWorkspaceEditorExtent(wcols.clientWidth * savedWidth, false);
       else setWorkspaceEditorExtent(wcols.clientWidth * 0.6, false);
     } catch (e) { setWorkspaceEditorExtent(wcols.clientWidth * 0.6, false); }
-  } else {
-    setWorkspaceEditorExtent(weditorElement.getBoundingClientRect().height, false);
+  } else if (!document.body.classList.contains('projector-mode')) {
+    const hasCustomHeight = (wcols.style.getPropertyValue('--weditor-height') || '').trim() !== '';
+    let hasSavedHeight = false;
+    try { hasSavedHeight = Number(localStorage.getItem('ccl-teacher-editor-height')) >= 120; } catch (e) {}
+    if (hasCustomHeight || hasSavedHeight) {
+      try { setWorkspaceEditorExtent(weditorElement.getBoundingClientRect().height, false); } catch (e) {}
+    } else {
+      try { if (weditor) weditor.layout(); } catch (e) {}
+      try { fitTeacherTerminal(); } catch (e) {}
+    }
   }
-  if (weditor && window.monaco) { weditor.updateOptions({ fontSize: on ? 17 : 13 }); weditor.layout(); }
+  const isProjector = document.body.classList.contains('projector-mode');
+  if (weditor && window.monaco) {
+    weditor.updateOptions({ fontSize: isProjector ? 20 : (workspaceFullscreen ? 17 : 13) });
+    try { weditor.layout(); } catch (e) {}
+  }
+  if (terminal && terminalFitAddon) {
+    try { terminal.options.fontSize = isProjector ? 16 : 13; } catch (e) {}
+    setTimeout(fitTeacherTerminal, 80);
+  }
 });
+// Terminal funciona mesmo que o Monaco falhe: inicializa já.
+try { initTeacherTerminal(); } catch (e) {}
 
 require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
 require(['vs/editor/editor.main'], function () {
-  focusEditor = monaco.editor.create(document.getElementById('focusEditor'), {
-    value: '// Seleciona um aluno para ver o código em direto...',
-    language: 'python', theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: true,
-    automaticLayout: true, fontSize: 13, minimap: { enabled: false }
-  });
   boardEditor = monaco.editor.create(document.getElementById('boardEditor'), {
     value: '// Seleciona um aluno no board para ver o código em direto...',
     language: 'python', theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: true,
@@ -1386,10 +1717,11 @@ require(['vs/editor/editor.main'], function () {
   const initialWorkspace = loadWorkspaceForRoom(roomInput.value);
   workspaceFiles = initialWorkspace.files;
   activeWorkspaceFileId = initialWorkspace.activeFileId;
+  const projectorFont = document.body.classList.contains('projector-mode') ? 20 : 13;
   weditor = monaco.editor.create(document.getElementById('weditor'), {
     value: getActiveWorkspaceFile().code,
     language: 'python', theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark',
-    automaticLayout: true, fontSize: 13, minimap: { enabled: true }
+    automaticLayout: true, fontSize: projectorFont, minimap: { enabled: true }
   });
   renderWorkspaceFiles();
   window._wroom = roomInput.value;
@@ -1404,6 +1736,7 @@ require(['vs/editor/editor.main'], function () {
     }, 800);
   });
   weditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runWorkspace);
+  initTeacherTerminal();
   render();
 });
 // Sem servidor: inicializa a UI na mesma para programar/projetar offline

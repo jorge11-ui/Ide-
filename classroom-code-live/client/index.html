@@ -187,6 +187,13 @@
   body.light .login-card .login-subtitle { color: #64748b !important; }
   body.light .login-card input { background: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
   body.light #studentProgressBtn { color: #334155 !important; border-color: #cbd5e1 !important; }
+  /* Contraste no tema claro: textos pálidos sobre fundo claro */
+  body.light #studentTasksToggle { color: #6d28d9 !important; border-color: #a78bfa !important; background: rgba(124, 58, 237, .08) !important; }
+  body.light #studentTasksToggle span { background: rgba(124, 58, 237, .16) !important; }
+  body.light .text-emerald-400 { color: #047857 !important; }
+  body.light .text-amber-300 { color: #b45309 !important; }
+  body.light .text-violet-200 { color: #6d28d9 !important; }
+  body.light .text-red-300 { color: #dc2626 !important; }
 
   :root {
     --studio-ink: #0b1214;
@@ -260,10 +267,10 @@
   body:not(.light) #runBtn:hover { background: #e5fa96 !important; }
   body:not(.light) #studentTasksToggle {
     border-color: rgba(255, 154, 119, .35) !important;
-    background: rgba(255, 154, 119, .1) !important;
+    background: rgba(0, 0, 0, 0.1) !important;
     color: #ffc0a9 !important;
   }
-  body:not(.light) #studentTasksToggle span { background: rgba(255, 154, 119, .18) !important; }
+  body:not(.light) #studentTasksToggle span { background: rgba(0, 0, 0, 0.18) !important; }
   body:not(.light) #consolePanel {
     border-color: var(--studio-line) !important;
     background: #012456 !important;
