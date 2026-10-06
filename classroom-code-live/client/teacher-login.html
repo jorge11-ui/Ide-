@@ -5,23 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>Acesso da professora — Classroom Code Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #020617; color: #e2e8f0; }
+    :root { color-scheme: dark; font: 16px "Space Grotesk", sans-serif; background: #0b1214; color: #eaf2ee; }
     * { box-sizing: border-box; }
-    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 1rem; }
-    main { width: min(100%, 26rem); padding: 2rem; border: 1px solid #334155; border-radius: 1rem; background: #0f172a; box-shadow: 0 24px 80px #0008; }
-    h1 { margin: 0 0 .5rem; font-size: 1.5rem; }
-    p { color: #7b8593; line-height: 1.5; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background-color: #0b1214;
+      background-image: linear-gradient(rgba(121, 224, 189, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(121, 224, 189, .035) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    main { position: relative; overflow: hidden; width: min(100%, 27rem); padding: 2rem; border: 1px solid #293b3d; border-radius: 1rem; background: rgba(17, 29, 32, .97); box-shadow: 0 28px 90px #0007, 0 1px #ffffff0a inset; }
+    main::before { position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, #79e0bd 0 62%, #ff9a77 62%); content: ""; }
+    .eyebrow { margin: 0 0 .8rem; color: #79e0bd; font: 600 .68rem/1.4 "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 0 0 .5rem; font-size: 1.8rem; line-height: 1.12; }
+    p { color: #90a5a2; line-height: 1.5; }
     label { display: block; margin: 1.5rem 0 .5rem; font-size: .9rem; font-weight: 600; }
-    input, button { width: 100%; border-radius: .6rem; font: inherit; }
-    input { padding: .75rem; border: 1px solid #475569; background: #020617; color: #f8fafc; }
-    button { margin-top: 1rem; padding: .75rem; border: 0; background: #7c3aed; color: white; font-weight: 700; cursor: pointer; }
+    input, button { width: 100%; border-radius: .5rem; font: inherit; }
+    input { padding: .8rem .85rem; border: 1px solid #34484a; background: #0c1719; color: #eaf2ee; }
+    input:focus-visible { outline: 2px solid #79e0bd; outline-offset: 2px; border-color: #79e0bd; }
+    button { margin-top: 1rem; padding: .8rem; border: 0; background: #d8f274; color: #172018; font-weight: 700; cursor: pointer; transition: background-color .16s ease, transform .16s ease; }
+    button:hover:not(:disabled) { background: #e5fa96; }
+    button:active:not(:disabled) { transform: translateY(1px); }
+    button:focus-visible { outline: 2px solid #79e0bd; outline-offset: 3px; }
     button:disabled { cursor: wait; opacity: .65; }
-    #message { min-height: 1.5rem; margin: .75rem 0 0; color: #fbbf24; font-size: .85rem; }
+    #message { min-height: 1.5rem; margin: .75rem 0 0; color: #ffbd78; font-size: .85rem; }
+    @media (max-width: 480px) { main { padding: 1.5rem; } h1 { font-size: 1.6rem; } }
   </style>
 </head>
 <body>
   <main>
+    <p class="eyebrow">Classroom Code Live / Área reservada</p>
     <h1 id="heading">Acesso da professora</h1>
     <p id="description">A verificar a configuração do servidor…</p>
     <form id="teacherLogin">
@@ -31,52 +51,6 @@
       <button type="submit" disabled>Entrar no painel</button>
     </form>
   </main>
-  <script>
-    const form = document.getElementById('teacherLogin');
-    const password = document.getElementById('password');
-    const message = document.getElementById('message');
-    const button = form.querySelector('button');
-    let setupRequired = false;
-    fetch('/teacher-auth-status', { cache: 'no-store' })
-      .then(async response => {
-        if (!response.ok) throw new Error('status');
-        const status = await response.json();
-        setupRequired = status.setupRequired === true;
-        if (setupRequired) {
-          document.getElementById('heading').textContent = 'Configurar acesso da professora';
-          document.getElementById('description').textContent = 'És a primeira pessoa a configurar este painel. Cria uma palavra-passe com pelo menos 12 caracteres. O acesso fica guardado neste servidor.';
-          document.getElementById('passwordLabel').textContent = 'Criar palavra-passe';
-          password.autocomplete = 'new-password';
-          password.minLength = 12;
-          button.textContent = 'Configurar e entrar';
-        }
-        password.disabled = false;
-        button.disabled = false;
-      })
-      .catch(() => { message.textContent = 'Não foi possível verificar a configuração do servidor.'; });
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      button.disabled = true;
-      message.textContent = setupRequired ? 'A guardar a configuração…' : 'A verificar…';
-      try {
-        const response = await fetch('/teacher-auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: password.value })
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          message.textContent = result.message || 'Não foi possível iniciar sessão.';
-          if (response.status === 409) location.reload();
-          return;
-        }
-        location.reload();
-      } catch (error) {
-        message.textContent = 'Não foi possível contactar o servidor.';
-      } finally {
-        button.disabled = false;
-      }
-    });
-  </script>
+  <script src="/js/teacher-login.js"></script>
 </body>
 </html>

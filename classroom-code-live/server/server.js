@@ -16,7 +16,9 @@ const io = new Server(server, { cors: { origin: '*' }, maxHttpBufferSize: 30 * 1
 const CLIENT_DIR = path.join(__dirname, '../client');
 const DATA_DIR = path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
+const STUDENT_REGISTRATIONS_FILE = path.join(DATA_DIR, 'student-registrations.json');
 const TEACHER_AUTH_FILE = path.join(DATA_DIR, 'teacher-auth.json');
+const TEACHER_CLASSROOMS_FILE = path.join(DATA_DIR, 'classrooms.json');
 const TEACHER_PASSWORD = process.env.TEACHER_PASSWORD || '';
 const ENV_SESSION_SECRET = process.env.TEACHER_SESSION_SECRET || '';
 const TEACHER_SESSION_MS = 365 * 24 * 60 * 60 * 1000;
@@ -152,6 +154,144 @@ app.get(['/teacher', '/teacher.html'], (req, res) => {
   res.sendFile(path.join(CLIENT_DIR, 'teacher.html'));
 });
 
+function requireTeacher(req, res, next) {
+  if (!isValidTeacherSession(req.headers.cookie)) {
+    return res.status(401).json({ message: 'Inicia sessão como professora.' });
+  }
+  next();
+}
+
+function readClassrooms() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(TEACHER_CLASSROOMS_FILE, 'utf8'));
+    return Array.isArray(saved) ? saved.filter(classroom =>
+      classroom && typeof classroom.id === 'string' && typeof classroom.name === 'string'
+    ) : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+let classrooms = readClassrooms();
+function readStudentRegistrations() {
+  if (!fs.existsSync(STUDENT_REGISTRATIONS_FILE)) return new Map();
+  const saved = JSON.parse(fs.readFileSync(STUDENT_REGISTRATIONS_FILE, 'utf8'));
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) {
+    throw new Error('O ficheiro de registos dos alunos está inválido.');
+  }
+  const entries = Object.entries(saved);
+  if (entries.some(([studentId, registration]) =>
+    !/^[a-zA-Z0-9_-]{1,80}$/.test(studentId) || !registration ||
+    typeof registration.roomId !== 'string' || typeof registration.name !== 'string'
+  )) {
+    throw new Error('O ficheiro de registos dos alunos está inválido.');
+  }
+  return new Map(entries);
+}
+const studentRegistrations = readStudentRegistrations();
+function persistStudentRegistrations() {
+  try {
+    fs.writeFileSync(STUDENT_REGISTRATIONS_FILE, JSON.stringify(Object.fromEntries(studentRegistrations), null, 2));
+    return true;
+  } catch (error) {
+    console.error('Não foi possível guardar os registos dos alunos:', error.message);
+    return false;
+  }
+}
+function persistStudentRegistration(studentId, registration) {
+  const previous = studentRegistrations.get(studentId);
+  studentRegistrations.set(studentId, registration);
+  if (persistStudentRegistrations()) return true;
+  if (previous) studentRegistrations.set(studentId, previous);
+  else studentRegistrations.delete(studentId);
+  return false;
+}
+function persistClassrooms() {
+  try {
+    fs.writeFileSync(TEACHER_CLASSROOMS_FILE, JSON.stringify(classrooms, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Não foi possível guardar as turmas:', error.message);
+    return false;
+  }
+}
+
+app.get('/teacher-classrooms', requireTeacher, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(classrooms);
+});
+
+app.get('/student-classrooms', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(classrooms.map(({ id, name }) => ({ id, name })));
+});
+
+app.post('/student-register', (req, res) => {
+  const studentId = typeof req.body.studentId === 'string' ? req.body.studentId.trim() : '';
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  const roomId = typeof req.body.roomId === 'string' ? req.body.roomId.trim() : '';
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(studentId)) {
+    return res.status(400).json({ message: 'Identificador de aluno inválido.' });
+  }
+  if (!name || name.length > 40) {
+    return res.status(400).json({ message: 'O nome deve ter entre 1 e 40 caracteres.' });
+  }
+  if (!classrooms.some(classroom => classroom.id === roomId)) {
+    return res.status(404).json({ message: 'Turma não encontrada. Confirma o convite da professora.' });
+  }
+  const binding = bindStudentToRoom(studentId, roomId, name);
+  if (!binding.ok) {
+    if (binding.reason === 'locked') {
+      const registeredClass = classrooms.find(classroom => classroom.id === binding.registration.roomId);
+      return res.status(409).json({ message: `Este aluno já está registado na turma ${registeredClass ? registeredClass.name : binding.registration.roomId}.` });
+    }
+    return res.status(500).json({ message: 'Não foi possível guardar o registo. Tenta novamente.' });
+  }
+  res.status(201).json({ studentId, name: binding.registration.name, roomId: binding.registration.roomId });
+});
+
+app.post('/teacher-classrooms', requireTeacher, (req, res) => {
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  const requestedId = typeof req.body.roomId === 'string' ? req.body.roomId.trim() : '';
+  if (!name || name.length > 80) {
+    return res.status(400).json({ message: 'O nome da turma deve ter entre 1 e 80 caracteres.' });
+  }
+  if (requestedId && !/^[a-zA-Z0-9_-]{1,60}$/.test(requestedId)) {
+    return res.status(400).json({ message: 'O código da turma é inválido.' });
+  }
+  if (requestedId && classrooms.some(classroom => classroom.id === requestedId)) {
+    return res.json(classrooms.find(classroom => classroom.id === requestedId));
+  }
+  let id = requestedId;
+  if (!id) {
+    do { id = 'room_' + crypto.randomBytes(6).toString('hex'); }
+    while (classrooms.some(classroom => classroom.id === id));
+  }
+  const classroom = { id, name, createdAt: Date.now() };
+  classrooms.push(classroom);
+  if (!persistClassrooms()) {
+    classrooms.pop();
+    return res.status(500).json({ message: 'Não foi possível guardar a turma.' });
+  }
+  res.status(201).json(classroom);
+});
+
+app.patch('/teacher-classrooms/:roomId', requireTeacher, (req, res) => {
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if (!name || name.length > 80) {
+    return res.status(400).json({ message: 'O nome da turma deve ter entre 1 e 80 caracteres.' });
+  }
+  const classroom = classrooms.find(item => item.id === req.params.roomId);
+  if (!classroom) return res.status(404).json({ message: 'Turma não encontrada.' });
+  const previousName = classroom.name;
+  classroom.name = name;
+  if (!persistClassrooms()) {
+    classroom.name = previousName;
+    return res.status(500).json({ message: 'Não foi possível guardar o nome da turma.' });
+  }
+  res.json(classroom);
+});
+
 // Serve o client/ (index.html do aluno + teacher.html da professora)
 // O servidor corre no PC da professora: alunos acedem via http://IP-LOCAL:3000
 app.use(express.static(CLIENT_DIR));
@@ -213,7 +353,8 @@ setInterval(() => {
   });
 }, 3000);
 try {
-  fs.readdirSync(DATA_DIR).filter((f) => f.endsWith('.json') && f !== 'tasks.json').forEach((f) => {
+  fs.readdirSync(DATA_DIR).filter((f) => f.endsWith('.json') &&
+    !['tasks.json', 'student-registrations.json', 'teacher-auth.json', 'classrooms.json'].includes(f)).forEach((f) => {
     try {
       const roomId = f.slice(0, -5);
       JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf8')).forEach(([sid, s]) => {
@@ -266,6 +407,36 @@ function publicTask(task, studentId) {
 function teacherTask(task) {
   return { ...task, submissions: task.submissions.slice() };
 }
+function findLegacyStudentRegistration(studentId) {
+  let match = null;
+  for (const [roomId, room] of rooms) {
+    const student = room.get(studentId);
+    if (!student) continue;
+    const lastSeenAt = student.lastSeenAt || student.updatedAt || 0;
+    if (!match || lastSeenAt > match.lastSeenAt) {
+      match = { roomId, name: student.name || 'Aluno', lastSeenAt };
+    }
+  }
+  return match && { roomId: match.roomId, name: match.name };
+}
+function bindStudentToRoom(studentId, roomId, name) {
+  let registration = studentRegistrations.get(studentId);
+  if (!registration) {
+    registration = findLegacyStudentRegistration(studentId);
+    if (registration && !persistStudentRegistration(studentId, registration)) {
+      return { ok: false, reason: 'storage' };
+    }
+  }
+  if (registration && registration.roomId !== roomId) {
+    return { ok: false, reason: 'locked', registration };
+  }
+  const nextRegistration = { roomId, name: name || (registration && registration.name) || 'Aluno' };
+  if ((!registration || registration.name !== nextRegistration.name) &&
+      !persistStudentRegistration(studentId, nextRegistration)) {
+    return { ok: false, reason: 'storage' };
+  }
+  return { ok: true, registration: nextRegistration };
+}
 
 io.on('connection', (socket) => {
   let myRoom = null;
@@ -289,6 +460,24 @@ io.on('connection', (socket) => {
     }
     const nextRoom = String(roomId);
     const nextRole = role === 'teacher' ? 'teacher' : 'student';
+    const sid = String(studentId || socket.id).slice(0, 80);
+    if (nextRole === 'student') {
+      if (!classrooms.some(classroom => classroom.id === nextRoom)) {
+        socket.emit('student_room_locked', { message: 'Turma não encontrada. Usa o convite da professora.' });
+        return;
+      }
+      const binding = bindStudentToRoom(sid, nextRoom, String(name || 'Aluno').slice(0, 40));
+      if (!binding.ok) {
+        const registeredClass = binding.registration && classrooms.find(classroom => classroom.id === binding.registration.roomId);
+        socket.emit('student_room_locked', {
+          roomId: binding.registration && binding.registration.roomId,
+          message: binding.reason === 'locked'
+            ? `Este aluno já está registado na turma ${registeredClass ? registeredClass.name : binding.registration.roomId}.`
+            : 'Não foi possível guardar o registo do aluno.'
+        });
+        return;
+      }
+    }
     if (myRoom && (myRoom !== nextRoom || myRole !== nextRole)) {
       const previousRoom = myRoom;
       if (myRole === 'student') {
@@ -314,7 +503,6 @@ io.on('connection', (socket) => {
     if (myRole === 'teacher') socket.join(myRoom + ':teachers');
 
     if (myRole === 'student') {
-      const sid = String(studentId || socket.id).slice(0, 80); // registado ou legado
       myStudentId = sid;
       const room = getRoom(myRoom);
       const prev = room.get(sid);

@@ -6,73 +6,79 @@
 <title>Classroom Code Live — Aluno</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
-<script>try { if ((localStorage.getItem('ccl-theme') || 'dark') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) {}</script>
+<script src="/js/theme-init.js" data-theme-key="ccl-theme"></script>
 <style>
-  html, body { height: 100%; }
-  #editorWorkspace { display: flex; flex: 1 1 auto; flex-direction: row; min-width: 0; min-height: 0; }
-  #editor { flex: 1 1 0; min-width: 120px; min-height: 120px; }
-  #consolePanel { width: var(--console-width, 34%); flex: 0 0 var(--console-width, 34%); min-width: 220px; min-height: 120px; }
-  .resize-handle {
-    position: relative;
-    z-index: 2;
-    flex: 0 0 10px;
-    cursor: col-resize;
-    touch-action: none;
-    display: grid;
-    place-items: center;
-    color: #64748b;
-    background: transparent;
-  }
-  .resize-handle::after {
-    content: "";
-    width: 3px;
-    height: 44px;
-    border-radius: 999px;
-    background: currentColor;
-    opacity: .55;
-    transition: width .15s ease, opacity .15s ease, background-color .15s ease;
-  }
-  .resize-handle:hover::after, .resize-handle:focus-visible::after, .resize-handle.is-resizing::after {
-    height: 64px;
-    opacity: 1;
-    background: #8b5cf6;
-  }
-  .resize-handle:focus-visible { outline: 2px solid #8b5cf6; outline-offset: -2px; }
-  #output, #consoleInputValue, #consoleInputPrompt, #consoleInputStatus, #runLabel { font-family: var(--code-font-family, "JetBrains Mono"), ui-monospace, Consolas, monospace; }
-  #output { font-size: 12.5px; line-height: 1.5; }
-  #consoleInputForm:not(.hidden) { display: flex; }
-  #consoleInputForm.hidden { display: none; }
-  #consolePanel { background: #0f172a; border-color: #1e293b; }
-  #consolePanel > div { border-color: #1e293b; }
-  #output { color: #cbd5e1; }
-  #consoleInputForm { border-color: #1e293b; }
-  #consoleInputValue { color: #f1f5f9; }
-  #consoleInputPrompt { color: #34d399; }
-  #consoleInputStatus { color: #64748b; }
-  #runLabel { color: #94a3b8; }
-  body.light #consolePanel { background: #fff; border-color: #e2e8f0; }
-  body.light #consolePanel > div, body.light #consoleInputForm { border-color: #e2e8f0; }
-  body.light #consolePanel .font-semibold { color: #0f172a !important; }
-  body.light #consolePanel .text-slate-600, body.light #runLabel { color: #64748b !important; }
-  body.light #output { color: #0f172a !important; }
-  body.light #output .text-red-400 { color: #dc2626 !important; }
-  body.light #output .text-slate-600 { color: #94a3b8 !important; }
-  body.light #consoleInputValue { color: #0f172a !important; }
-  body.light #consoleInputPrompt { color: #047857; }
-  body.light #consoleInputStatus { color: #64748b; }
-  @media (max-width: 760px) {
-    #editorWorkspace { flex-direction: column; }
-    #editor { flex: 1 1 auto; width: 100%; min-width: 0; }
-    #consolePanel { width: 100%; flex: 0 0 var(--console-height, 12rem); height: var(--console-height, 12rem); min-width: 0; }
-    .resize-handle { flex-basis: 10px; cursor: row-resize; }
-    .resize-handle::after { width: 44px; height: 3px; }
-    .resize-handle:hover::after, .resize-handle:focus-visible::after, .resize-handle.is-resizing::after { width: 64px; height: 3px; }
-  }
-  body.light #consoleInputForm { border-color: #e2e8f0 !important; }
-  body.light #consoleInputForm input { color: #0f172a !important; }
+    html, body { height: 100%; }
+    #appShell:not(.hidden) { display: flex; flex-direction: column; height: 100%; }
+    #mainArea { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
+    #activityBar { width: 48px; flex: 0 0 48px; display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; border-right: 1px solid var(--studio-line, #293b3d); background: var(--studio-surface, #111d20); }
+    .activity-btn { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; color: var(--studio-muted, #90a5a2); background: transparent; border: none; cursor: pointer; transition: background .15s, color .15s; }
+    .activity-btn:hover, .activity-btn.active { background: var(--studio-raised, #18272a); color: var(--studio-mint, #79e0bd); }
+    .activity-btn:focus-visible { outline: 2px solid var(--studio-mint, #79e0bd); outline-offset: 2px; }
+    .activity-btn svg { width: 20px; height: 20px; }
+    .activity-btn .badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--studio-coral, #ff9a77); color: var(--studio-ink, #0b1214); font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+    #editorWorkspace { display: flex; flex: 1 1 auto; flex-direction: row; min-width: 0; min-height: 0; }
+    #editor { flex: 1 1 0; min-width: 120px; min-height: 120px; }
+    #consolePanel { width: var(--console-width, 34%); flex: 0 0 var(--console-width, 34%); min-width: 220px; min-height: 120px; }
+    .resize-handle {
+      position: relative;
+      z-index: 2;
+      flex: 0 0 10px;
+      cursor: col-resize;
+      touch-action: none;
+      display: grid;
+      place-items: center;
+      color: var(--studio-muted, #64748b);
+      background: transparent;
+    }
+    .resize-handle::after {
+      content: "";
+      width: 3px;
+      height: 44px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: .55;
+      transition: width .15s ease, opacity .15s ease, background-color .15s ease;
+    }
+    .resize-handle:hover::after, .resize-handle:focus-visible::after, .resize-handle.is-resizing::after {
+      height: 64px;
+      opacity: 1;
+      background: var(--studio-mint, #8b5cf6);
+    }
+    .resize-handle:focus-visible { outline: 2px solid var(--studio-mint, #8b5cf6); outline-offset: -2px; }
+    #output, #runLabel { font-family: var(--code-font-family, "JetBrains Mono"), ui-monospace, Consolas, monospace; }
+    #output { min-height: 0; }
+    #terminal-container { width: 100%; height: 100%; }
+    #terminal-container .xterm { height: 100%; padding: 4px 8px; }
+    #terminal-container .xterm-viewport { scrollbar-color: #1b4e85 #012456; scrollbar-width: thin; }
+    #terminal-container .xterm-viewport::-webkit-scrollbar { width: 8px; }
+    #terminal-container .xterm-viewport::-webkit-scrollbar-track { background: #012456; }
+    #terminal-container .xterm-viewport::-webkit-scrollbar-thumb { background: #1b4e85; }
+    #consolePanel { background: #0f172a; border-color: #1e293b; }
+    #consolePanel > div { border-color: #1e293b; }
+    #output { color: #cbd5e1; }
+    #runLabel { color: #94a3b8; }
+    body.light #consolePanel { background: #fff; border-color: #e2e8f0; }
+    body.light #consolePanel > div { border-color: #e2e8f0; }
+    body.light #consolePanel .font-semibold { color: #0f172a !important; }
+    body.light #consolePanel .text-slate-600, body.light #runLabel { color: #64748b !important; }
+    body.light #output { color: #0f172a !important; }
+    body.light #output .text-red-400 { color: #dc2626 !important; }
+    body.light #output .text-slate-600 { color: #94a3b8 !important; }
+    @media (max-width: 760px) {
+      #mainArea { flex-direction: column; }
+      #activityBar { width: 100%; height: 48px; flex-direction: row; flex: 0 0 48px; border-right: none; border-bottom: 1px solid var(--studio-line, #293b3d); padding: 0 8px; justify-content: flex-start; gap: 2px; }
+      #editorWorkspace { flex-direction: column; }
+      #editor { flex: 1 1 auto; width: 100%; min-width: 0; }
+      #consolePanel { width: 100%; flex: 0 0 var(--console-height, 12rem); height: var(--console-height, 12rem); min-width: 0; }
+      .resize-handle { flex-basis: 10px; cursor: row-resize; }
+      .resize-handle::after { width: 44px; height: 3px; }
+      .resize-handle:hover::after, .resize-handle:focus-visible::after, .resize-handle.is-resizing::after { width: 64px; height: 3px; }
+    }
   #studentTasksPanel:not(.hidden) {
     position: fixed;
     z-index: 30;
@@ -181,6 +187,111 @@
   body.light .login-card .login-subtitle { color: #64748b !important; }
   body.light .login-card input { background: #f8fafc !important; border-color: #cbd5e1 !important; color: #0f172a !important; }
   body.light #studentProgressBtn { color: #334155 !important; border-color: #cbd5e1 !important; }
+
+  :root {
+    --studio-ink: #0b1214;
+    --studio-surface: #111d20;
+    --studio-raised: #18272a;
+    --studio-line: #293b3d;
+    --studio-mint: #79e0bd;
+    --studio-coral: #ff9a77;
+    --studio-lime: #d8f274;
+    --studio-text: #eaf2ee;
+    --studio-muted: #90a5a2;
+    --studio-display: "Space Grotesk", sans-serif;
+  }
+  body:not(.light) {
+    color: var(--studio-text) !important;
+    background-color: var(--studio-ink) !important;
+    background-image: linear-gradient(rgba(121, 224, 189, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(121, 224, 189, .035) 1px, transparent 1px);
+    background-size: 32px 32px;
+    font-family: var(--studio-display);
+  }
+  body:not(.light) #loginView { background: transparent; }
+  body:not(.light) .login-card {
+    position: relative;
+    overflow: hidden;
+    border-color: var(--studio-line) !important;
+    border-radius: 1rem;
+    background: rgba(17, 29, 32, .97) !important;
+    box-shadow: 0 28px 90px rgba(0, 0, 0, .38), 0 1px rgba(255, 255, 255, .04) inset;
+  }
+  body:not(.light) .login-card::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, var(--studio-mint) 0 62%, var(--studio-coral) 62% 100%);
+    content: "";
+  }
+  body:not(.light) .login-card h1 { font-family: var(--studio-display); font-size: 1.75rem; letter-spacing: 0; }
+  body:not(.light) .login-card .text-emerald-400 { color: var(--studio-mint) !important; }
+  body:not(.light) .login-card > div:first-child > div:first-child {
+    border-radius: .75rem;
+    background: var(--studio-lime) !important;
+    box-shadow: 0 8px 24px rgba(216, 242, 116, .12);
+  }
+  body:not(.light) #appShell > header {
+    border-color: var(--studio-line) !important;
+    background: rgba(11, 18, 20, .94) !important;
+    box-shadow: 0 1px rgba(255, 255, 255, .035);
+    backdrop-filter: blur(16px);
+  }
+  body:not(.light) #appShell > header > div:first-child {
+    border-radius: .7rem;
+    background: var(--studio-lime) !important;
+    color: var(--studio-ink) !important;
+  }
+  body:not(.light) #toolbar {
+    border-color: var(--studio-line) !important;
+    background: rgba(17, 29, 32, .94) !important;
+  }
+  body:not(.light) #toolbar input,
+  body:not(.light) #toolbar select,
+  body:not(.light) #settingsMenu {
+    border-color: var(--studio-line) !important;
+    background-color: var(--studio-raised) !important;
+  }
+  body:not(.light) #runBtn {
+    border: 1px solid rgba(216, 242, 116, .25);
+    background: var(--studio-lime) !important;
+    color: #172018 !important;
+    box-shadow: 0 4px 18px rgba(216, 242, 116, .09);
+  }
+  body:not(.light) #runBtn:hover { background: #e5fa96 !important; }
+  body:not(.light) #studentTasksToggle {
+    border-color: rgba(255, 154, 119, .35) !important;
+    background: rgba(255, 154, 119, .1) !important;
+    color: #ffc0a9 !important;
+  }
+  body:not(.light) #studentTasksToggle span { background: rgba(255, 154, 119, .18) !important; }
+  body:not(.light) #consolePanel {
+    border-color: var(--studio-line) !important;
+    background: #012456 !important;
+  }
+  body:not(.light) #consolePanel > div { border-color: #1b4e85 !important; }
+  body:not(.light) #consolePanel > div:first-child {
+    background: #003a70;
+    color: #dceeff;
+  }
+  body:not(.light) #consolePanel .font-semibold { color: #ffffff !important; }
+  body:not(.light) #consolePanel > div:first-child > span:last-child { color: #a9c9e8 !important; }
+  body:not(.light) #output { color: #f2f2f2; }
+  body:not(.light) #consolePanel #runLabel { color: #a9c9e8 !important; }
+  body:not(.light) .resize-handle { color: var(--studio-mint); }
+  body:not(.light) #studentTasksPanel:not(.hidden) {
+    border-color: var(--studio-line);
+    border-radius: .8rem;
+    background: var(--studio-surface);
+  }
+  body:not(.light) #studentTasksPanel:not(.hidden) .student-tasks-header { background: var(--studio-surface); }
+  body:not(.light) #studentTasksPanel:not(.hidden) .student-task-card {
+    border-color: var(--studio-line);
+    border-radius: .65rem;
+    background: #162326;
+  }
+  body:not(.light) button:focus-visible,
+  body:not(.light) input:focus-visible,
+  body:not(.light) select:focus-visible { outline-color: var(--studio-mint); }
 </style>
 </head>
 <body class="bg-slate-950 text-slate-100 flex flex-col h-screen">
@@ -191,21 +302,23 @@
         <div class="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500 text-lg font-bold text-slate-950">&lt;/&gt;</div>
         <div>
           <p class="text-xs font-semibold uppercase tracking-[.14em] text-emerald-400">Classroom Code Live</p>
-          <h1 class="mt-1 text-xl font-bold">Entrar na turma</h1>
+          <h1 class="mt-1 text-xl font-bold">Registar aluno</h1>
         </div>
       </div>
-      <p class="login-subtitle mb-6 text-sm leading-relaxed text-slate-400">Regista o teu nome e o código da turma para começares a programar.</p>
+      <p class="login-subtitle mb-6 text-sm leading-relaxed text-slate-400">O teu registo fica associado a uma turma neste dispositivo.</p>
       <form id="loginForm" class="space-y-4">
         <div>
-          <label for="loginName" class="mb-1.5 block text-sm font-medium text-slate-300">O teu nome</label>
+          <label for="loginName" class="mb-1.5 block text-sm font-medium text-slate-300">Nome do aluno</label>
           <input id="loginName" name="name" required maxlength="40" autocomplete="name" placeholder="Ex.: Ana Silva" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20" />
         </div>
         <div>
-          <label for="loginRoom" class="mb-1.5 block text-sm font-medium text-slate-300">Código da turma</label>
-          <input id="loginRoom" name="room" required maxlength="60" autocomplete="off" placeholder="Ex.: room_12A" class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 font-mono text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20" />
+          <label for="loginRoom" class="mb-1.5 block text-sm font-medium text-slate-300">Turma</label>
+          <select id="loginRoom" name="room" required class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20">
+            <option value="">A carregar turmas...</option>
+          </select>
         </div>
         <p id="loginFeedback" class="min-h-5 text-xs text-amber-300" role="status" aria-live="polite"></p>
-        <button type="submit" class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400">Entrar e começar</button>
+        <button type="submit" class="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400">Registar e começar</button>
       </form>
     </section>
   </main>
@@ -231,12 +344,8 @@
     <button id="runBtn" class="bg-emerald-600 hover:bg-emerald-500 rounded px-4 py-1 text-sm font-bold">▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span></button>
     <div class="relative">
       <button id="settingsBtn" title="Definições" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1 text-sm font-bold">⋯</button>
+      <input type="hidden" id="roomInput" value="room_12A" />
       <div id="settingsMenu" class="hidden absolute right-0 mt-1 w-64 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3 z-50 space-y-2">
-        <p class="menu-label">SALA</p>
-        <div class="flex gap-1">
-          <input id="roomInput" value="room_12A" class="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none focus:border-emerald-500 font-mono" title="Sala" />
-          <button id="joinBtn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1 text-sm">Entrar</button>
-        </div>
         <p class="menu-label">TEMA</p>
         <select id="themeSelect" title="Tema da página e do editor" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm outline-none">
           <option value="dark">Escuro</option>
@@ -276,7 +385,16 @@
   <!-- Aviso de turma congelada -->
   <div id="freezeBanner" class="hidden px-4 py-1.5 text-xs font-semibold text-center bg-red-600 text-white">Turma congelada pela professora</div>
 
-  <div id="editorWorkspace">
+  <div id="mainArea">
+    <aside id="activityBar" aria-label="Barra de atividades">
+      <button type="button" class="activity-btn" title="Abrir ficheiro de código" aria-label="Abrir ficheiro de código" data-panel="files">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      </button>
+      <button type="button" class="activity-btn" title="Buscar no código (Ctrl+F)" aria-label="Buscar no código" data-panel="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </button>
+    </aside>
+    <div id="editorWorkspace">
     <!-- Editor -->
     <div id="editor"></div>
 
@@ -285,720 +403,23 @@
     <!-- Consola / Preview : execução 100% local = rápido -->
     <section id="consolePanel" class="shrink-0 border-l border-slate-800 bg-slate-900 flex flex-col">
       <div class="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-slate-800">
-        <span class="font-semibold text-slate-300">Consola</span>
+        <span class="font-semibold text-slate-300">Terminal</span>
         <span id="runLabel" class="text-slate-500 font-mono"></span>
         <span class="ml-auto text-slate-600">Python via Pyodide • corre no browser</span>
       </div>
-      <pre id="output" class="flex-1 overflow-auto px-4 py-2 text-slate-300">Prime <b>▶ Executar</b> para ver o resultado aqui.</pre>
-      <form id="consoleInputForm" class="hidden shrink-0 items-center gap-2 border-t border-slate-800 px-4 py-2" autocomplete="off">
-        <label id="consoleInputPrompt" for="consoleInputValue" class="shrink-0 max-w-[45%] truncate text-xs text-emerald-400">Input:</label>
-        <input id="consoleInputValue" type="text" class="min-w-0 flex-1 bg-transparent text-sm font-mono text-slate-100 outline-none placeholder:text-slate-600" placeholder="Escreve a resposta e prime Enter" aria-label="Resposta para input do programa" />
-        <button type="submit" class="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-600">Enviar</button>
-        <span id="consoleInputStatus" class="shrink-0 text-[11px] text-slate-500" aria-live="polite"></span>
-      </form>
+      <div id="output" class="flex-1 min-h-0 overflow-hidden px-2 py-2">
+        <div id="terminal-container"></div>
+      </div>
       <iframe id="preview" class="flex-1 w-full bg-white hidden" sandbox="allow-scripts" title="preview"></iframe>
     </section>
   </div>
 
-  <!-- Statusbar -->
-  <footer class="flex items-center gap-4 px-4 py-1.5 text-xs text-slate-400 border-t border-slate-800 bg-slate-900">
-    <span>Ln <span id="line">1</span>, Col <span id="col">1</span></span>
-    <span id="chars">0 chars</span>
-    <span id="savedLabel" title="O código é guardado automaticamente neste computador (por sala + linguagem)">Guardado: —</span>
-    <span id="regLabel" title="Registo do aluno: nome + ID persistente neste computador">Registo: —</span>
-    <span class="ml-auto">Último envio: <span id="lastSend" class="font-mono">—</span></span>
-  </footer>
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
-<script>
-// ---------- socket (inalterado) ----------
-const qs = new URLSearchParams(location.search);
-const roomInput = document.getElementById('roomInput');
-const nameInput = document.getElementById('nameInput');
-const langSelect = document.getElementById('langSelect');
-const themeSelect = document.getElementById('themeSelect');
-const fontSelect = document.getElementById('fontSelect');
-const loginNameInput = document.getElementById('loginName');
-const loginRoomInput = document.getElementById('loginRoom');
-const codeFonts = {
-  jetbrains: '"JetBrains Mono"',
-  fira: '"Fira Code"',
-  ibm: '"IBM Plex Mono"'
-};
-function applyCodeFont(font) {
-  const selectedFont = Object.prototype.hasOwnProperty.call(codeFonts, font) ? font : 'jetbrains';
-  fontSelect.value = selectedFont;
-  document.documentElement.style.setProperty('--code-font-family', codeFonts[selectedFont]);
-  if (window._editor) window._editor.updateOptions({ fontFamily: codeFonts[selectedFont] + ', ui-monospace, Consolas, monospace' });
-  try { localStorage.setItem('ccl-code-font', selectedFont); } catch (e) {}
-}
-let savedCodeFont = 'jetbrains';
-try { savedCodeFont = localStorage.getItem('ccl-code-font') || 'jetbrains'; } catch (e) {}
-applyCodeFont(savedCodeFont);
-fontSelect.onchange = () => applyCodeFont(fontSelect.value);
-// Tema gravado: aplica à página já antes do Monaco carregar
-function applyTheme(mode) {
-  const light = mode === 'light';
-  document.body.classList.toggle('light', light);
-  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
-  themeSelect.value = light ? 'light' : 'dark';
-  try { localStorage.setItem('ccl-theme', light ? 'light' : 'dark'); } catch (e) {}
-  if (window._editor && window.monaco) monaco.editor.setTheme(light ? 'vs' : 'vs-dark');
-}
-let savedTheme = 'dark';
-try { savedTheme = localStorage.getItem('ccl-theme') || 'dark'; } catch (e) {}
-applyTheme(savedTheme === 'light' ? 'light' : 'dark');
-themeSelect.onchange = () => applyTheme(themeSelect.value);
-// Menu Definições (⋯): abre/fecha, fecha ao clicar fora ou com Escape
-const settingsMenu = document.getElementById('settingsMenu');
-document.getElementById('settingsBtn').onclick = (e) => { e.stopPropagation(); settingsMenu.classList.toggle('hidden'); };
-document.addEventListener('click', (e) => { if (!settingsMenu.classList.contains('hidden') && !settingsMenu.contains(e.target)) settingsMenu.classList.add('hidden'); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') settingsMenu.classList.add('hidden'); });
-settingsMenu.addEventListener('click', (e) => { if (e.target.closest('button')) settingsMenu.classList.add('hidden'); });
-let savedRoom = '';
-let savedName = '';
-try { savedRoom = localStorage.getItem('ccl-student-room') || ''; } catch (e) {}
-roomInput.value = qs.get('room') || savedRoom || roomInput.value;
-if (qs.get('name')) nameInput.value = qs.get('name');
-document.getElementById('roomLabel').textContent = roomInput.value;
-// ---- Registo do aluno: nome + ID persistente neste computador ----
-// O servidor identifica o aluno por este ID: reconnects juntam-se ao mesmo
-// registo e o código fica visível à professora mesmo com o aluno offline.
-function getStudentId() {
-  try {
-    let id = localStorage.getItem('ccl-student-id');
-    if (!id) {
-      id = 's-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-      localStorage.setItem('ccl-student-id', id);
-    }
-    return id;
-  } catch (e) { return 's-temp-' + Math.random().toString(36).slice(2, 8); }
-}
-const studentId = getStudentId();
-try {
-  savedName = localStorage.getItem('ccl-student-name') || '';
-  if (savedName && !qs.get('name')) nameInput.value = savedName;
-} catch (e) {}
-const shouldRestoreStudentSession = Boolean(
-  savedName.trim() && savedRoom.trim() && roomInput.value === savedRoom &&
-  (!qs.get('name') || qs.get('name') === savedName)
-);
-loginNameInput.value = nameInput.value;
-loginRoomInput.value = roomInput.value;
-function refreshRegLabel() {
-  const el = document.getElementById('regLabel');
-  if (el) el.textContent = 'Registo: ' + (nameInput.value || 'Aluno') + ' (' + studentId.slice(0, 12) + '…)';
-}
-refreshRegLabel();
-
-const socket = io();
-let isRegistered = shouldRestoreStudentSession;
-const statusDot = document.getElementById('statusDot');
-function setStatus(txt, ok) {
-  statusDot.textContent = txt;
-  statusDot.className = 'text-xs px-2 py-1 rounded-full border ' + (ok
-    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-    : 'bg-red-500/15 text-red-300 border-red-500/30');
-}
-socket.on('connect', () => {
-  setStatus('● ligado', true);
-  if (isRegistered) join(false);
-  else document.getElementById('loginFeedback').textContent = 'Ligação pronta. Preenche os teus dados para entrar.';
-});
-socket.on('disconnect', () => {
-  setStatus('● desligado', false);
-  if (!isRegistered) document.getElementById('loginFeedback').textContent = 'Sem ligação ao servidor. Podes entrar e continuar a programar neste dispositivo.';
-});
-let lastRoom = roomInput.value;
-function join(manual) {
-  if (manual && roomInput.value !== lastRoom) {
-    studentTasks.clear();
-    renderStudentTasks();
-    document.getElementById('studentTaskStatus').textContent = '';
-  }
-  document.getElementById('roomLabel').textContent = roomInput.value;
-  try { localStorage.setItem('ccl-student-name', nameInput.value); } catch (e) {}
-  try { localStorage.setItem('ccl-student-room', roomInput.value); } catch (e) {}
-  refreshRegLabel();
-  socket.emit('join_room', { roomId: roomInput.value, name: nameInput.value, role: 'student', language: langSelect.value, studentId });
-  // Mudou de sala manualmente: carrega o código guardado dessa sala (ou modelo novo)
-  if (manual && window._editor && roomInput.value !== lastRoom) {
-    lastRoom = roomInput.value;
-    const saved = loadSaved(roomInput.value, langSelect.value);
-    window._editor.setValue((saved !== null && saved !== undefined) ? saved : defaultTemplate(langSelect.value));
-  } else {
-    lastRoom = roomInput.value;
-  }
-  sendUpdate(true);
-}
-document.getElementById('joinBtn').onclick = () => join(true);
-nameInput.onchange = () => join(false);
-function enterClass(name, room) {
-  nameInput.value = name;
-  roomInput.value = room;
-  loginNameInput.value = name;
-  loginRoomInput.value = room;
-  isRegistered = true;
-  document.getElementById('loginView').classList.add('hidden');
-  document.getElementById('appShell').classList.remove('hidden');
-  document.getElementById('appShell').classList.add('flex');
-  document.getElementById('loginFeedback').textContent = '';
-  join(true);
-  setTimeout(() => { if (window._editor) window._editor.layout(); }, 80);
-}
-document.getElementById('loginForm').addEventListener('submit', (event) => {
-  event.preventDefault();
-  const name = loginNameInput.value.trim();
-  const room = loginRoomInput.value.trim();
-  if (!name || !room) {
-    document.getElementById('loginFeedback').textContent = 'Preenche o teu nome e o código da turma.';
-    return;
-  }
-  enterClass(name, room);
-});
-if (shouldRestoreStudentSession) enterClass(nameInput.value.trim(), roomInput.value.trim());
-function sendUpdate() {
-  if (!window._editor) return;
-  const code = window._editor.getValue();
-  socket.emit('code_update', {
-    roomId: roomInput.value, code, language: langSelect.value,
-    progressStatus: studentProgressStatus
-  });
-  document.getElementById('lastSend').textContent = new Date().toLocaleTimeString() + ' (' + code.length + ' chars)';
-}
-// Congelar: a professora bloqueia a escrita (readOnly) via freeze_state
-window._frozen = false;
-function applyFreeze(f) {
-  window._frozen = f === true;
-  const b = document.getElementById('freezeBanner');
-  if (b) b.classList.toggle('hidden', !window._frozen);
-  if (window._editor && window.monaco) window._editor.updateOptions({ readOnly: window._frozen });
-}
-socket.on('freeze_state', ({ frozen: f }) => applyFreeze(f));
-
-const pendingTasks = [];
-const studentTasks = new Map();
-const submittingTasks = new Set();
-function renderStudentTasks() {
-  const list = document.getElementById('studentTaskList');
-  list.textContent = '';
-  const tasks = [...studentTasks.values()].sort((a, b) => b.createdAt - a.createdAt);
-  document.getElementById('studentTaskCount').textContent = String(tasks.length);
-  if (!tasks.length) {
-    const empty = document.createElement('p');
-    empty.className = 'rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-xs text-slate-500';
-    empty.textContent = 'Ainda não há tarefas publicadas nesta sala.';
-    list.appendChild(empty);
-    return;
-  }
-  tasks.forEach(task => {
-    const card = document.createElement('article');
-    card.className = 'student-task-card rounded-lg border border-slate-800 bg-slate-950/40 p-3';
-    const heading = document.createElement('div');
-    heading.className = 'flex items-start gap-2';
-    const title = document.createElement('h3');
-    title.className = 'min-w-0 flex-1 text-sm font-semibold';
-    title.textContent = task.title;
-    const status = document.createElement('span');
-    status.className = task.mySubmission
-      ? (task.mySubmission.late
-        ? 'shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300'
-        : 'shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400')
-      : 'shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300';
-    status.textContent = task.mySubmission ? (task.mySubmission.late ? 'Entregue com atraso' : 'Entregue') :
-      (task.deadlineAt && Date.now() > task.deadlineAt ? 'Prazo ultrapassado' : 'Por entregar');
-    heading.append(title, status);
-    const description = document.createElement('p');
-    description.className = 'task-description mt-1 whitespace-pre-wrap break-words text-xs text-slate-400';
-    description.textContent = task.description;
-    const meta = document.createElement('p');
-    meta.className = 'mt-2 text-[10px] text-slate-500';
-    meta.textContent = (task.mySubmission
-      ? 'Última entrega: ' + new Date(task.mySubmission.submittedAt).toLocaleString()
-      : 'Publicada: ' + new Date(task.createdAt).toLocaleString()) +
-      (task.deadlineAt ? ' • Prazo: ' + new Date(task.deadlineAt).toLocaleString() : '');
-    const feedback = task.mySubmission && task.mySubmission.feedback;
-    let feedbackElement = null;
-    if (feedback) {
-      feedbackElement = document.createElement('p');
-      feedbackElement.className = 'mt-2 whitespace-pre-wrap rounded-md border border-violet-500/20 bg-violet-500/5 p-2 text-xs text-violet-200';
-      feedbackElement.textContent = 'Feedback da professora: ' + feedback;
-    }
-    const submit = document.createElement('button');
-    submit.type = 'button';
-    submit.className = 'mt-3 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60';
-    submit.disabled = submittingTasks.has(task.id);
-    submit.textContent = submittingTasks.has(task.id) ? 'A enviar…' : (task.mySubmission ? 'Entregar novamente' : 'Entregar tarefa');
-    submit.setAttribute('aria-label', submit.textContent + ': ' + task.title);
-    submit.onclick = () => submitTask(task);
-    card.append(heading, description, meta);
-    if (feedbackElement) card.appendChild(feedbackElement);
-    card.appendChild(submit);
-    list.appendChild(card);
-  });
-}
-function receiveClassTasks(tasks) {
-  if (!Array.isArray(tasks)) return;
-  studentTasks.clear();
-  tasks.forEach(task => {
-    if (task && typeof task.id === 'string' && task.roomId === roomInput.value) {
-      studentTasks.set(task.id, task);
-      applyClassTask(task);
-    }
-  });
-  renderStudentTasks();
-}
-function receiveClassTask(task) {
-  if (!task || task.roomId !== roomInput.value) return;
-  const previous = studentTasks.get(task.id);
-  studentTasks.set(task.id, { ...task, mySubmission: previous ? previous.mySubmission : (task.mySubmission || null) });
-  applyClassTask(task);
-  renderStudentTasks();
-}
-let studentProgressStatus = 'not_started';
-function renderStudentProgress() {
-  const button = document.getElementById('studentProgressBtn');
-  const needsHelp = studentProgressStatus === 'help';
-  button.textContent = needsHelp ? 'A pedir ajuda ✓' : 'Preciso de ajuda';
-  button.setAttribute('aria-pressed', String(needsHelp));
-  button.classList.toggle('border-amber-500/50', needsHelp);
-  button.classList.toggle('text-amber-300', needsHelp);
-}
-document.getElementById('studentProgressBtn').onclick = () => {
-  studentProgressStatus = studentProgressStatus === 'help' ? 'working' : 'help';
-  renderStudentProgress();
-  socket.emit('student_progress', { roomId: roomInput.value, status: studentProgressStatus });
-};
-socket.on('student_progress_state', ({ status } = {}) => {
-  studentProgressStatus = ['working', 'help'].includes(status) ? status : 'not_started';
-  renderStudentProgress();
-});
-renderStudentProgress();
-function submitTask(task) {
-  if (!window._editor || !socket.connected || submittingTasks.has(task.id)) {
-    document.getElementById('studentTaskStatus').textContent = 'A ligação ou o editor ainda não estão prontos.';
-    return;
-  }
-  submittingTasks.add(task.id);
-  document.getElementById('studentTaskStatus').textContent = 'A enviar a entrega…';
-  renderStudentTasks();
-  socket.emit('submit_task', {
-    roomId: roomInput.value,
-    taskId: task.id,
-    code: window._editor.getValue(),
-    language: langSelect.value
-  });
-}
-const studentTasksToggle = document.getElementById('studentTasksToggle');
-const studentTasksPanel = document.getElementById('studentTasksPanel');
-function setStudentTasksOpen(open) {
-  studentTasksPanel.classList.toggle('hidden', !open);
-  document.getElementById('studentTasksBackdrop').classList.toggle('hidden', !open);
-  studentTasksToggle.setAttribute('aria-expanded', String(open));
-  if (open) {
-    const toolbarBottom = document.getElementById('toolbar').getBoundingClientRect().bottom;
-    studentTasksPanel.style.setProperty('--student-tasks-top', Math.max(8, toolbarBottom + 8) + 'px');
-    document.getElementById('studentTasksClose').focus();
-  } else {
-    studentTasksToggle.focus();
-  }
-}
-studentTasksToggle.onclick = () => {
-  setStudentTasksOpen(studentTasksPanel.classList.contains('hidden'));
-};
-document.getElementById('studentTasksClose').onclick = () => setStudentTasksOpen(false);
-document.getElementById('studentTasksBackdrop').onclick = () => setStudentTasksOpen(false);
-window.addEventListener('resize', () => {
-  if (!studentTasksPanel.classList.contains('hidden')) {
-    const toolbarBottom = document.getElementById('toolbar').getBoundingClientRect().bottom;
-    studentTasksPanel.style.setProperty('--student-tasks-top', Math.max(8, toolbarBottom + 8) + 'px');
-  }
-});
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !studentTasksPanel.classList.contains('hidden')) {
-    setStudentTasksOpen(false);
-  }
-});
-renderStudentTasks();
-function applyClassTask(task) {
-  if (!task || task.roomId !== roomInput.value || !window._editor || !window.monaco) {
-    if (task && task.roomId === roomInput.value && (!window._editor || !window.monaco)) pendingTasks.push(task);
-    return;
-  }
-  if (langSelect.value !== 'python' || typeof task.id !== 'string' ||
-      typeof task.title !== 'string' || typeof task.description !== 'string') return;
-  const editor = window._editor;
-  const model = editor.getModel();
-  if (!model) return;
-  const marker = '# Tarefa ID: ' + task.id;
-  if (model.getValue().includes(marker)) return;
-  const description = task.description.replace(/\r\n?/g, '\n').split('\n').map(line => line ? '# ' + line : '#');
-  const commentBlock = [
-    marker,
-    '# Tarefa: ' + task.title,
-    ...description,
-    '# --- Fim da tarefa ---',
-    '',
-    ''
-  ].join('\n');
-  const selections = editor.getSelections() || [];
-  const cursorOffsets = selections.map(selection => ({
-    start: model.getOffsetAt(selection.getStartPosition()),
-    end: model.getOffsetAt(selection.getEndPosition())
-  }));
-  model.applyEdits([{
-    range: new monaco.Range(1, 1, 1, 1),
-    text: commentBlock,
-    forceMoveMarkers: true
-  }]);
-  if (cursorOffsets.length) {
-    editor.setSelections(cursorOffsets.map(offsets => {
-      const start = model.getPositionAt(offsets.start + commentBlock.length);
-      const end = model.getPositionAt(offsets.end + commentBlock.length);
-      return new monaco.Selection(start.lineNumber, start.column, end.lineNumber, end.column);
-    }));
-  }
-}
-socket.on('class_task', receiveClassTask);
-socket.on('class_tasks', receiveClassTasks);
-socket.on('submission_saved', ({ taskId, submission }) => {
-  const task = studentTasks.get(taskId);
-  if (task) task.mySubmission = submission;
-  submittingTasks.delete(taskId);
-  document.getElementById('studentTaskStatus').textContent = 'Entrega enviada com sucesso.';
-  renderStudentTasks();
-});
-socket.on('submission_error', ({ taskId, message }) => {
-  if (taskId) submittingTasks.delete(taskId);
-  document.getElementById('studentTaskStatus').textContent = message || 'Não foi possível enviar a entrega.';
-  renderStudentTasks();
-});
-socket.on('submission_feedback', ({ taskId, submissionId, feedback, feedbackAt }) => {
-  const task = studentTasks.get(taskId);
-  if (!task || !task.mySubmission || task.mySubmission.id !== submissionId) return;
-  task.mySubmission.feedback = feedback;
-  task.mySubmission.feedbackAt = feedbackAt;
-  document.getElementById('studentTaskStatus').textContent = 'Recebeste feedback da professora.';
-  renderStudentTasks();
-});
-
-// ---------- execução local e rápida ----------
-const output = document.getElementById('output');
-const preview = document.getElementById('preview');
-const runBtn = document.getElementById('runBtn');
-const runTime = document.getElementById('runTime');
-const runLabel = document.getElementById('runLabel');
-function print(lines, isErr) {
-  output.innerHTML = lines.length ? lines.map(l => isErr ? '<span class="text-red-400">' + esc(l) + '</span>' : esc(l)).join('\n') : '<span class="text-slate-600">(sem output — o programa correu sem console.log/print)</span>';
-}
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function showConsole(){ output.classList.remove('hidden'); preview.classList.add('hidden'); }
-function showPreview(){ output.classList.add('hidden'); preview.classList.remove('hidden'); }
-document.getElementById('clearBtn').onclick = () => {
-  if (pendingConsoleInput) cancelConsoleInput();
-  output.textContent = ''; showConsole(); runTime.textContent = '';
-};
-
-// Resize the console beside the editor on desktop and below it on small screens.
-const editorConsoleResize = document.getElementById('editorConsoleResize');
-const consolePanel = document.getElementById('consolePanel');
-const consoleHeightKey = 'ccl-console-height';
-const consoleWidthKey = 'ccl-console-width';
-const editorWorkspace = document.getElementById('editorWorkspace');
-function isConsoleSideBySide() { return window.matchMedia('(min-width: 761px)').matches; }
-function setConsoleExtent(value, save) {
-  const sideBySide = isConsoleSideBySide();
-  const available = sideBySide
-    ? Math.max(220, editorWorkspace.clientWidth - editorConsoleResize.offsetWidth - 120)
-    : Math.max(120, editorWorkspace.clientHeight - editorConsoleResize.offsetHeight - 120);
-  const minimum = sideBySide ? 220 : 120;
-  const maximum = Math.max(minimum, Math.min(available - 120, available * 0.7));
-  const next = Math.round(Math.max(minimum, Math.min(maximum, value)));
-  if (sideBySide) {
-    document.documentElement.style.setProperty('--console-width', next + 'px');
-    editorConsoleResize.setAttribute('aria-orientation', 'vertical');
-    editorConsoleResize.setAttribute('aria-valuemin', '220');
-    editorConsoleResize.setAttribute('aria-valuenow', String(next));
-  } else {
-    document.documentElement.style.setProperty('--console-height', next + 'px');
-    editorConsoleResize.setAttribute('aria-orientation', 'horizontal');
-    editorConsoleResize.setAttribute('aria-valuemin', '120');
-    editorConsoleResize.setAttribute('aria-valuenow', String(next));
-  }
-  if (save) {
-    try { localStorage.setItem(sideBySide ? consoleWidthKey : consoleHeightKey, String(next)); } catch (e) {}
-  }
-  if (window._editor) window._editor.layout();
-}
-try {
-  const sideBySide = isConsoleSideBySide();
-  const savedExtent = Number(localStorage.getItem(sideBySide ? consoleWidthKey : consoleHeightKey));
-  if (Number.isFinite(savedExtent) && savedExtent >= (sideBySide ? 220 : 120)) setConsoleExtent(savedExtent, false);
-  else if (sideBySide) setConsoleExtent(editorWorkspace.clientWidth * 0.34, false);
-} catch (e) {}
-editorConsoleResize.addEventListener('pointerdown', (event) => {
-  event.preventDefault();
-  editorConsoleResize.setPointerCapture(event.pointerId);
-  editorConsoleResize.classList.add('is-resizing');
-  const sideBySide = isConsoleSideBySide();
-  const startPosition = sideBySide ? event.clientX : event.clientY;
-  const startExtent = sideBySide ? consolePanel.getBoundingClientRect().width : consolePanel.getBoundingClientRect().height;
-  const resize = (moveEvent) => {
-    const position = sideBySide ? moveEvent.clientX : moveEvent.clientY;
-    setConsoleExtent(startExtent + startPosition - position, true);
-  };
-  const stop = () => {
-    editorConsoleResize.classList.remove('is-resizing');
-    editorConsoleResize.removeEventListener('pointermove', resize);
-    editorConsoleResize.removeEventListener('pointerup', stop);
-    editorConsoleResize.removeEventListener('pointercancel', stop);
-  };
-  editorConsoleResize.addEventListener('pointermove', resize);
-  editorConsoleResize.addEventListener('pointerup', stop);
-  editorConsoleResize.addEventListener('pointercancel', stop);
-});
-editorConsoleResize.addEventListener('keydown', (event) => {
-  const sideBySide = isConsoleSideBySide();
-  const decrease = sideBySide ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';
-  const increase = sideBySide ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
-  if (decrease || increase) {
-    event.preventDefault();
-    const current = sideBySide ? consolePanel.getBoundingClientRect().width : consolePanel.getBoundingClientRect().height;
-    setConsoleExtent(current + (increase ? 16 : -16), true);
-  }
-});
-window.addEventListener('resize', () => {
-  const sideBySide = isConsoleSideBySide();
-  let savedExtent = null;
-  try { savedExtent = Number(localStorage.getItem(sideBySide ? consoleWidthKey : consoleHeightKey)); } catch (e) {}
-  if (Number.isFinite(savedExtent) && savedExtent >= (sideBySide ? 220 : 120)) setConsoleExtent(savedExtent, false);
-  else if (sideBySide) setConsoleExtent(editorWorkspace.clientWidth * 0.34, false);
-  else setConsoleExtent(consolePanel.getBoundingClientRect().height, false);
-});
-
-// Python via Pyodide, pré-carregado em fundo para o Run ser rápido
-let pyodidePromise = null;
-function getPyodide() {
-  if (!pyodidePromise) pyodidePromise = loadPyodide();
-  return pyodidePromise;
-}
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    getPyodide().then(() => {
-      const el = document.getElementById('pyStatus');
-      el.textContent = 'py: pronto ✓'; el.className = 'text-xs px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
-    }).catch(() => { document.getElementById('pyStatus').textContent = 'py: falhou (sem net?)'; });
-  }, 1500);
-});
-let pendingConsoleInput = null;
-const consoleInputForm = document.getElementById('consoleInputForm');
-const consoleInputValue = document.getElementById('consoleInputValue');
-const consoleInputPrompt = document.getElementById('consoleInputPrompt');
-const consoleInputStatus = document.getElementById('consoleInputStatus');
-function showConsoleInput(prompt) {
-  consoleInputPrompt.textContent = prompt || 'Input:';
-  consoleInputStatus.textContent = 'À espera';
-  consoleInputValue.value = '';
-  consoleInputForm.classList.remove('hidden');
-  consoleInputValue.focus();
-}
-function cancelConsoleInput() {
-  pendingConsoleInput = null;
-  consoleInputForm.classList.add('hidden');
-  consoleInputValue.value = '';
-  consoleInputStatus.textContent = '';
-  runBtn.disabled = false;
-  runBtn.innerHTML = '▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span>';
-}
-consoleInputForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  if (!pendingConsoleInput) return;
-  pendingConsoleInput.answers.push(consoleInputValue.value);
-  const { code, answers } = pendingConsoleInput;
-  consoleInputForm.classList.add('hidden');
-  executePython(code, answers);
-});
-async function runPython(code, answers) {
-  const py = await getPyodide();
-  const logs = [];
-  py.setStdout({ batched: (s) => logs.push(s) });
-  py.setStderr({ batched: (s) => logs.push('[erro] ' + s) });
-  // Replay with queued answers because Pyodide cannot await browser input() synchronously.
-  const wrapper = [
-    'import json as _ccl_json',
-    '_ccl_answers = ' + JSON.stringify(answers),
-    'class _CCLNeedInput(BaseException): pass',
-    'def _ccl_input(prompt=""):',
-    '    if not _ccl_answers: raise _CCLNeedInput(str(prompt))',
-    '    answer = _ccl_answers.pop(0)',
-    '    print(str(prompt) + answer)',
-    '    return answer',
-    "_ccl_namespace = {'__name__': '__main__', 'input': _ccl_input}",
-    'try:',
-    '    exec(compile(' + JSON.stringify(code) + ', "<student>", "exec"), _ccl_namespace, _ccl_namespace)',
-    'except _CCLNeedInput as _ccl_error:',
-    '    _ccl_result = {"waiting": True, "prompt": str(_ccl_error)}',
-    'else:',
-    '    _ccl_result = {"waiting": False}',
-    '_ccl_json.dumps(_ccl_result)'
-  ].join('\n');
-  const result = await py.runPythonAsync(wrapper);
-  return { ...JSON.parse(result), logs };
-}
-
-async function run() {
-  if (!window._editor || pendingConsoleInput) return;
-  const code = window._editor.getValue();
-  executePython(code, []);
-}
-async function executePython(code, answers) {
-  const t0 = performance.now();
-  let waitingForInput = false;
-  runBtn.disabled = true; runBtn.textContent = '⏳ A correr...';
-  runLabel.textContent = 'python • ' + code.length + ' chars';
-  try {
-    showConsole();
-    output.textContent = answers.length ? '' : 'A correr Python... (1ª vez pode demorar uns segundos a carregar o Pyodide)';
-    const result = await runPython(code, answers);
-    if (result.waiting) {
-      pendingConsoleInput = { code, answers };
-      if (result.logs.length) print(result.logs, false);
-      else output.textContent = '';
-      showConsoleInput(result.prompt);
-      runBtn.textContent = 'A aguardar input…';
-      waitingForInput = true;
-      return;
-    }
-    pendingConsoleInput = null;
-    consoleInputForm.classList.add('hidden');
-    consoleInputStatus.textContent = '';
-    print(result.logs, false);
-    runTime.textContent = Math.round(performance.now() - t0) + 'ms';
-  } catch (e) {
-    pendingConsoleInput = null;
-    consoleInputForm.classList.add('hidden');
-    consoleInputStatus.textContent = '';
-    showConsole(); print(['⛔ ' + (e && e.message || e)], true);
-  } finally {
-    if (!waitingForInput) {
-      runBtn.disabled = false; runBtn.innerHTML = '▶ Executar <span class="font-normal opacity-70">(Ctrl+Enter)</span>';
-    }
-  }
-}
-runBtn.onclick = run;
-window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); } });
-
-// ---------- guardar no computador (localStorage por sala+linguagem) ----------
-function codeKey(room, lang) { return 'ccl-code:' + room + ':' + lang; }
-function defaultTemplate() {
-  return '';
-}
-function isOldStudentTemplate(code) {
-  const normalized = code.replace(/\r\n/g, '\n').trim();
-  return normalized === '# Escreve aqui o teu código...\ndef soma(a, b):\n    return a + b\n\nprint(soma(2, 3))';
-}
-function loadSaved(room, lang) {
-  try {
-    const saved = localStorage.getItem(codeKey(room, lang));
-    if (saved !== null && isOldStudentTemplate(saved)) {
-      localStorage.setItem(codeKey(room, lang), '');
-      return '';
-    }
-    return saved;
-  } catch (e) { return null; }
-}
-function saveLocal(room, lang, code) {
-  try { localStorage.setItem(codeKey(room, lang), code); } catch (e) { return; }
-  const el = document.getElementById('savedLabel');
-  if (el) el.textContent = 'Guardado: ' + new Date().toLocaleTimeString();
-}
-function downloadStudentCode() {
-  if (!window._editor) return;
-  const ext = 'py';
-  const safe = (nameInput.value || 'aluno').replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([window._editor.getValue()], { type: 'text/plain;charset=utf-8' }));
-  a.download = safe + '.' + ext;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-}
-document.getElementById('dlBtn').onclick = downloadStudentCode;
-document.getElementById('newBtn').onclick = () => {
-  if (!window._editor) return;
-  if (confirm('Queres descarregar uma cópia do código atual antes de o limpar? Escolhe Cancelar para continuar sem descarregar.')) {
-    downloadStudentCode();
-  }
-  if (!confirm('Começar do zero? O código atual será substituído por um editor vazio.')) return;
-  window._editor.setValue(defaultTemplate(langSelect.value));
-  saveLocal(roomInput.value, langSelect.value, window._editor.getValue());
-  showConsole(); sendUpdate(true);
-};
-// Upload: carrega um ficheiro .py/.txt do computador para o editor
-document.getElementById('uploadBtn').onclick = () => document.getElementById('uploadInput').click();
-document.getElementById('uploadInput').onchange = (e) => {
-  const f = e.target.files && e.target.files[0];
-  if (!f || !window._editor) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const text = String(reader.result || '').slice(0, 200000);
-    window._editor.setValue(text);
-    saveLocal(roomInput.value, langSelect.value, text);
-    const sl = document.getElementById('savedLabel');
-    if (sl) sl.textContent = 'Ficheiro ' + f.name.slice(0, 30) + ' carregado ✓';
-    showConsole(); sendUpdate(true);
-  };
-  reader.readAsText(f);
-  e.target.value = '';
-};
-
-// ---------- monaco ----------
-require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
-require(['vs/editor/editor.main'], function () {
-  const editor = monaco.editor.create(document.getElementById('editor'), {
-    value: (loadSaved(roomInput.value, langSelect.value) ?? defaultTemplate(langSelect.value)),
-    language: langSelect.value, theme: document.body.classList.contains('light') ? 'vs' : 'vs-dark', readOnly: window._frozen === true, automaticLayout: true, fontSize: 14, fontFamily: codeFonts[fontSelect.value] + ', ui-monospace, Consolas, monospace', minimap: { enabled: false }
-  });
-  window._editor = editor;
-  pendingTasks.splice(0).forEach(applyClassTask);
-  document.getElementById('chars').textContent = editor.getValue().length + ' chars';
-  if ((loadSaved(roomInput.value, langSelect.value) ?? '') !== '') {
-    const sl = document.getElementById('savedLabel');
-    if (sl) sl.textContent = 'Restaurado onde paraste ✓';
-  }
-  window._prevLang = langSelect.value;
-  langSelect.onchange = () => {
-    try { localStorage.setItem(codeKey(roomInput.value, window._prevLang), editor.getValue()); } catch (e) {}
-    monaco.editor.setModelLanguage(editor.getModel(), langSelect.value);
-    const saved = loadSaved(roomInput.value, langSelect.value);
-    editor.setValue((saved !== null && saved !== undefined) ? saved : defaultTemplate(langSelect.value));
-    window._prevLang = langSelect.value;
-    showConsole(); sendUpdate(true);
-  };
-  editor.onDidChangeCursorPosition(e => {
-    document.getElementById('line').textContent = e.position.lineNumber;
-    document.getElementById('col').textContent = e.position.column;
-  });
-  let t;
-  editor.onDidChangeModelContent(() => {
-    const code = editor.getValue();
-    document.getElementById('chars').textContent = code.length + ' chars';
-    clearTimeout(t);
-    t = setTimeout(() => {
-      if (isRegistered && studentProgressStatus !== 'help') {
-        studentProgressStatus = 'working';
-        renderStudentProgress();
-      }
-      sendUpdate(false);
-    }, 400);
-    // autosave local (debounce próprio para não escrever a cada tecla)
-    clearTimeout(window._saveT);
-    window._saveT = setTimeout(() => saveLocal(roomInput.value, langSelect.value, editor.getValue()), 800);
-  });
-  socket.on('request_state', () => sendUpdate(true));
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => run());
-});
-</script>
+<script src="/js/student.js"></script>
 </body>
 </html>
